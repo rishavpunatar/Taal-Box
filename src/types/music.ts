@@ -47,6 +47,8 @@ export interface TaalLoopAudio {
   sourceBpm: number
   mode?: 'replace' | 'layer'
   loop?: boolean
+  loopStartSeconds?: number
+  loopEndSeconds?: number
 }
 
 export interface TaalLoopVariant {

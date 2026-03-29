@@ -483,8 +483,10 @@ export class SurSaathAudioEngine {
     player.unsync()
     player.stop()
     player.loop = audioLoop.loop ?? true
+    player.loopStart = audioLoop.loopStartSeconds ?? 0
+    player.loopEnd = audioLoop.loopEndSeconds ?? player.buffer.duration
     player.playbackRate = getPlaybackRate(Tone.Transport.bpm.value, audioLoop.sourceBpm)
-    player.sync().start(0)
+    player.sync().start(0, audioLoop.loopStartSeconds ?? 0)
     this.activeLoopPlayer = player
   }
 

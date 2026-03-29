@@ -70,7 +70,7 @@ Each taal can expose multiple loops through:
 
 Each beat stores a display label plus one or more scheduled tabla strokes, so swung addha, sitarkhani, tilwada, or ghazal-style loops can be represented without flattening everything to one bol per matra.
 
-Audio-backed variants can also point at a bundled loop file in `public/audio/loops/`. The current `Dadra -> Ghazal` variant uses a live loop recording and follows the app tempo by adjusting playback rate from its tagged source BPM.
+Audio-backed variants can also point at a bundled loop file in `public/audio/loops/`, with optional source BPM and loop start/end points. The current `Dadra -> Ghazal` variant uses a live loop recording and follows the app tempo by adjusting playback rate from its tagged source BPM.
 
 Cycle-end transition fills are kept in `src/lib/transitionFills.ts` so the steady loop data remains readable while the playback engine can still add occasional movement.
 
