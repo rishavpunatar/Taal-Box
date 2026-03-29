@@ -1,0 +1,62 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Spectral:wght@500;600;700&display=swap');
+
+:root {
+  font-family: 'Manrope', sans-serif;
+  line-height: 1.5;
+  font-weight: 500;
+  color: #f4eedb;
+  background:
+    radial-gradient(circle at top left, rgba(231, 164, 68, 0.2), transparent 34%),
+    radial-gradient(circle at top right, rgba(103, 171, 157, 0.18), transparent 26%),
+    linear-gradient(180deg, #12151c 0%, #090b11 100%);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  --font-display: 'Spectral', serif;
+  --color-accent: #e7a444;
+  --color-accent-soft: #f4c17b;
+  --color-success: #67ab9d;
+  --color-text-strong: #fff7df;
+  --color-text-muted: #c8c0ad;
+  --color-text-subtle: #9d9788;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: transparent;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(circle at 20% 15%, rgba(231, 164, 68, 0.11), transparent 18%),
+    radial-gradient(circle at 80% 12%, rgba(103, 171, 157, 0.1), transparent 16%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.02), transparent 25%);
+  pointer-events: none;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+}
+
+img,
+svg {
+  display: block;
+}

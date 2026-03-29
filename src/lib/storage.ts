@@ -1,0 +1,63 @@
+import { TAAL_BY_ID } from '../data/taals'
+import { TONICS, type AppSettings, type Tonic } from '../types/music'
+import { clampTempo, clampUnitLevel } from './music'
+
+const STORAGE_KEY = 'sursaath-settings-v1'
+
+export const DEFAULT_SETTINGS: AppSettings = {
+  taalId: 'teentaal',
+  tonic: 'C',
+  tempo: 84,
+  tanpuraVolume: 0.72,
+  percussionVolume: 0.76,
+}
+
+function isTonic(value: unknown): value is Tonic {
+  return typeof value === 'string' && TONICS.includes(value as Tonic)
+}
+
+export function loadSettings() {
+  if (typeof window === 'undefined') {
+    return DEFAULT_SETTINGS
+  }
+
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY)
+
+    if (!raw) {
+      return DEFAULT_SETTINGS
+    }
+
+    const parsed = JSON.parse(raw) as Partial<AppSettings>
+
+    return {
+      taalId:
+        typeof parsed.taalId === 'string' && parsed.taalId in TAAL_BY_ID
+          ? parsed.taalId
+          : DEFAULT_SETTINGS.taalId,
+      tonic: isTonic(parsed.tonic) ? parsed.tonic : DEFAULT_SETTINGS.tonic,
+      tempo:
+        typeof parsed.tempo === 'number'
+          ? clampTempo(parsed.tempo)
+          : DEFAULT_SETTINGS.tempo,
+      tanpuraVolume:
+        typeof parsed.tanpuraVolume === 'number'
+          ? clampUnitLevel(parsed.tanpuraVolume)
+          : DEFAULT_SETTINGS.tanpuraVolume,
+      percussionVolume:
+        typeof parsed.percussionVolume === 'number'
+          ? clampUnitLevel(parsed.percussionVolume)
+          : DEFAULT_SETTINGS.percussionVolume,
+    }
+  } catch {
+    return DEFAULT_SETTINGS
+  }
+}
+
+export function saveSettings(settings: AppSettings) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
+}
