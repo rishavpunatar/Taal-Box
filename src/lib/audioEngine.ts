@@ -16,12 +16,20 @@ import { getTransitionFill } from './transitionFills'
 
 const TANPURA_STROKE_OFFSETS = [0, 1.18, 2.36, 3.56] as const
 const TANPURA_CYCLE_SECONDS = 4.78
-const TABLA_SAMPLE_BASE_URL = `${import.meta.env.BASE_URL}audio/tabla/`
+const TABLA_SAMPLE_BASE_URL = `${import.meta.env.BASE_URL}audio/tabla-fs/`
 const TABLA_SAMPLE_NOTES = {
-  bass: 'C3',
-  open: 'D3',
-  bright: 'E3',
-  muted: 'F3',
+  dha: 'C3',
+  dhin: 'D3',
+  ga: 'E3',
+  na: 'F3',
+  tin: 'G3',
+  tun: 'A3',
+  tak: 'B3',
+  te: 'C4',
+  tit: 'D4',
+  re: 'E4',
+  kat: 'F4',
+  ka: 'G4',
 } as const
 
 function levelToDb(level: number) {
@@ -137,8 +145,8 @@ export class SurSaathAudioEngine {
     this.percussionBus = new Tone.Gain(1)
     this.percussionCompressor = new Tone.Compressor(-20, 4)
     this.percussionReverb = new Tone.Reverb({
-      decay: 1.6,
-      wet: 0.12,
+      decay: 1.15,
+      wet: 0.06,
       preDelay: 0.01,
     })
     this.percussionVolume = new Tone.Volume(-8)
@@ -212,14 +220,22 @@ export class SurSaathAudioEngine {
     const samplerReady = new Promise<void>((resolve) => {
       this.tablaSampler = new Tone.Sampler({
         urls: {
-          [TABLA_SAMPLE_NOTES.bass]: 'bayan-ge.wav',
-          [TABLA_SAMPLE_NOTES.open]: 'dayan-open.wav',
-          [TABLA_SAMPLE_NOTES.bright]: 'dayan-bright.wav',
-          [TABLA_SAMPLE_NOTES.muted]: 'dayan-muted.wav',
+          [TABLA_SAMPLE_NOTES.dha]: 'dha.mp3',
+          [TABLA_SAMPLE_NOTES.dhin]: 'dhin.mp3',
+          [TABLA_SAMPLE_NOTES.ga]: 'ga.mp3',
+          [TABLA_SAMPLE_NOTES.na]: 'na.mp3',
+          [TABLA_SAMPLE_NOTES.tin]: 'tin.mp3',
+          [TABLA_SAMPLE_NOTES.tun]: 'tun.mp3',
+          [TABLA_SAMPLE_NOTES.tak]: 'tak.mp3',
+          [TABLA_SAMPLE_NOTES.te]: 'te.mp3',
+          [TABLA_SAMPLE_NOTES.tit]: 'tit.mp3',
+          [TABLA_SAMPLE_NOTES.re]: 're.mp3',
+          [TABLA_SAMPLE_NOTES.kat]: 'kat.mp3',
+          [TABLA_SAMPLE_NOTES.ka]: 'ka.mp3',
         },
         baseUrl: TABLA_SAMPLE_BASE_URL,
         attack: 0,
-        release: 0.18,
+        release: 0.08,
         curve: 'exponential',
         onload: () => {
           this.tablaSamplerLoaded = true
@@ -808,18 +824,11 @@ export class SurSaathAudioEngine {
 
     switch (bol) {
       case 'Dha':
-        this.playTablaSample(TABLA_SAMPLE_NOTES.bass, '8n', time, velocity)
-        this.playTablaSample(
-          TABLA_SAMPLE_NOTES.bright,
-          '16n',
-          time,
-          velocity * accentBoost,
-        )
+        this.playTablaSample(TABLA_SAMPLE_NOTES.dha, '8n', time, velocity * accentBoost)
         break
       case 'Dhin':
-        this.playTablaSample(TABLA_SAMPLE_NOTES.bass, '8n', time, velocity * 0.96)
         this.playTablaSample(
-          TABLA_SAMPLE_NOTES.open,
+          TABLA_SAMPLE_NOTES.dhin,
           '8n',
           time,
           velocity * accentBoost,
@@ -827,15 +836,15 @@ export class SurSaathAudioEngine {
         break
       case 'Dhi':
         this.playTablaSample(
-          TABLA_SAMPLE_NOTES.open,
+          TABLA_SAMPLE_NOTES.tin,
           '16n',
           time,
-          velocity * 0.84,
+          velocity * 0.86,
         )
         break
       case 'Tin':
         this.playTablaSample(
-          TABLA_SAMPLE_NOTES.open,
+          TABLA_SAMPLE_NOTES.tin,
           '8n',
           time,
           velocity * accentBoost,
@@ -843,93 +852,87 @@ export class SurSaathAudioEngine {
         break
       case 'Na':
         this.playTablaSample(
-          TABLA_SAMPLE_NOTES.bright,
+          TABLA_SAMPLE_NOTES.na,
           '16n',
-          time,
-          velocity * 0.86,
-        )
-        break
-      case 'Ta':
-        this.playTablaSample(
-          TABLA_SAMPLE_NOTES.muted,
-          '32n',
-          time,
-          velocity * 0.8,
-        )
-        break
-      case 'Ge':
-        this.playTablaSample(
-          TABLA_SAMPLE_NOTES.bass,
-          '8n',
           time,
           velocity * 0.92,
         )
         break
-      case 'Tu':
+      case 'Ta':
         this.playTablaSample(
-          TABLA_SAMPLE_NOTES.muted,
+          TABLA_SAMPLE_NOTES.tak,
           '16n',
           time,
-          velocity * 0.76,
+          velocity * 0.84,
         )
         break
-      case 'Tun':
+      case 'Ge':
         this.playTablaSample(
-          TABLA_SAMPLE_NOTES.open,
-          '4n',
+          TABLA_SAMPLE_NOTES.ga,
+          '8n',
           time,
           velocity * 0.94,
         )
         break
+      case 'Tu':
+        this.playTablaSample(
+          TABLA_SAMPLE_NOTES.te,
+          '16n',
+          time,
+          velocity * 0.8,
+        )
+        break
+      case 'Tun':
+        this.playTablaSample(
+          TABLA_SAMPLE_NOTES.tun,
+          '4n',
+          time,
+          velocity * 0.96,
+        )
+        break
       case 'Ka':
         this.playTablaSample(
-          TABLA_SAMPLE_NOTES.muted,
+          TABLA_SAMPLE_NOTES.ka,
+          '64n',
+          time,
+          velocity * 0.8,
+        )
+        break
+      case 'Ti':
+        this.playTablaSample(
+          TABLA_SAMPLE_NOTES.tit,
+          '32n',
+          time,
+          velocity * 0.82,
+        )
+        break
+      case 'Re':
+        this.playTablaSample(
+          TABLA_SAMPLE_NOTES.re,
+          '64n',
+          time,
+          velocity * 0.74,
+        )
+        break
+      case 'Ki':
+        this.playTablaSample(
+          TABLA_SAMPLE_NOTES.ka,
           '64n',
           time,
           velocity * 0.72,
         )
         break
-      case 'Ti':
-        this.playTablaSample(
-          TABLA_SAMPLE_NOTES.muted,
-          '32n',
-          time,
-          velocity * 0.74,
-        )
-        break
-      case 'Re':
-        this.playTablaSample(
-          TABLA_SAMPLE_NOTES.muted,
-          '64n',
-          time,
-          velocity * 0.66,
-        )
-        break
-      case 'Ki':
-        this.playTablaSample(
-          TABLA_SAMPLE_NOTES.muted,
-          '64n',
-          time,
-          velocity * 0.66,
-        )
-        break
       case 'Kat':
         this.playTablaSample(
-          TABLA_SAMPLE_NOTES.muted,
-          '64n',
+          TABLA_SAMPLE_NOTES.kat,
+          '32n',
           time,
-          velocity * 0.74,
-        )
-        this.playTablaSample(
-          TABLA_SAMPLE_NOTES.muted,
-          '64n',
-          time + 0.018,
-          velocity * 0.52,
+          velocity * 0.82,
         )
         break
       default:
         this.playTablaSample(
-          TABLA_SAMPLE_NOTES.open,
+          TABLA_SAMPLE_NOTES.tin,
           '16n',
           time,
           velocity * 0.8,

@@ -56,7 +56,7 @@ If GitHub Pages is not already configured for the repository, set:
 - `src/lib/transitionFills.ts`: light cycle-end fill patterns that keep repeated loops from feeling static
 - `src/lib/storage.ts`: local storage persistence
 - `src/components/`: UI building blocks
-- `public/audio/tabla/`: derived tabla one-shots used by the taal engine
+- `public/audio/tabla-fs/`: named tabla-bol previews used by the taal engine
 
 ## Editing taals and presets
 
@@ -117,7 +117,7 @@ python3 scripts/extract_tabla_samples.py
 
 ## Audio asset attribution
 
-The tabla one-shots in `public/audio/tabla/` are derived from the Wikimedia Commons file `Tabla drums demo.oga` by `tabladrumsonline`, licensed under CC BY-SA 3.0. See `public/audio/tabla/ATTRIBUTION.md`.
+The active tabla playback bank in `public/audio/tabla-fs/` comes from the Freesound pack `Tabla Strokes` by `ajaysm`, licensed under CC BY 4.0. See `public/audio/tabla-fs/ATTRIBUTION.md`.
 
 ## Good next improvements
 
