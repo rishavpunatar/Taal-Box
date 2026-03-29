@@ -31,8 +31,22 @@ export type Bol =
   | 'Ki'
   | 'Kat'
 
-export interface TaalBeat {
+export interface TaalStroke {
   bol: Bol
+  offset?: number
+  velocity?: number
+}
+
+export interface TaalBeat {
+  label: string
+  strokes: TaalStroke[]
+}
+
+export interface TaalLoopVariant {
+  id: string
+  label: string
+  summary: string
+  beats: TaalBeat[]
 }
 
 export interface TaalDefinition {
@@ -42,8 +56,9 @@ export interface TaalDefinition {
   vibhags: number[]
   sam: number
   khali: number[]
-  theka: TaalBeat[]
   summary: string
+  defaultLoopId: string
+  loops: TaalLoopVariant[]
 }
 
 export interface PracticePreset {
@@ -51,12 +66,14 @@ export interface PracticePreset {
   label: string
   subtitle: string
   taalId: string
+  loopId?: string
   tempo: number
   tonic?: Tonic
 }
 
 export interface AppSettings {
   taalId: string
+  loopId: string
   tonic: Tonic
   tempo: number
   tanpuraVolume: number

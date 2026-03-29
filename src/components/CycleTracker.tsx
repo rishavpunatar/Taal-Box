@@ -1,9 +1,10 @@
 import { getVibhagStarts } from '../lib/music'
-import type { PlaybackState, TaalDefinition } from '../types/music'
+import type { PlaybackState, TaalDefinition, TaalLoopVariant } from '../types/music'
 import { SectionCard } from './SectionCard'
 
 interface CycleTrackerProps {
   taal: TaalDefinition
+  loop: TaalLoopVariant
   currentMatra: number
   cycle: number
   playbackState: PlaybackState
@@ -11,6 +12,7 @@ interface CycleTrackerProps {
 
 export function CycleTracker({
   taal,
+  loop,
   currentMatra,
   cycle,
   playbackState,
@@ -42,6 +44,10 @@ export function CycleTracker({
           <span className="stat-label">Vibhag</span>
           <strong>{taal.vibhags.join(' + ')}</strong>
         </div>
+        <div>
+          <span className="stat-label">Loop</span>
+          <strong>{loop.label}</strong>
+        </div>
       </div>
 
       <div className="cycle-grid">
@@ -55,7 +61,7 @@ export function CycleTracker({
               : `Vibhag ${vibhagIndex + 1}`
 
           return (
-            <div className="vibhag-card" key={`${taal.id}-${start}`}>
+            <div className="vibhag-card" key={`${taal.id}-${loop.id}-${start}`}>
               <div className="vibhag-card__header">
                 <strong>{label}</strong>
                 <span>{beats.join(' • ')}</span>
@@ -63,14 +69,14 @@ export function CycleTracker({
 
               <div className="vibhag-card__beats">
                 {beats.map((matra) => {
-                  const beat = taal.theka[matra - 1]
+                  const beat = loop.beats[matra - 1]
                   const isActive = matra === currentMatra
                   const isSam = matra === taal.sam
                   const isKhali = taal.khali.includes(matra)
 
                   return (
                     <div
-                      key={`${taal.id}-${matra}`}
+                      key={`${taal.id}-${loop.id}-${matra}`}
                       className={[
                         'beat-chip',
                         isActive ? 'beat-chip--active' : '',
@@ -81,7 +87,7 @@ export function CycleTracker({
                         .join(' ')}
                     >
                       <span className="beat-chip__number">{matra}</span>
-                      <span className="beat-chip__bol">{beat.bol}</span>
+                      <span className="beat-chip__bol">{beat.label}</span>
                     </div>
                   )
                 })}

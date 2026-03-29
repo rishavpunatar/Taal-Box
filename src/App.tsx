@@ -10,10 +10,16 @@ import { CycleTracker } from './components/CycleTracker'
 import { HelpPanel } from './components/HelpPanel'
 import { SectionCard } from './components/SectionCard'
 import { SliderField } from './components/SliderField'
-import { PRESETS, TAAL_BY_ID, TAALS } from './data/taals'
+import {
+  getDefaultLoop,
+  getLoopById,
+  PRESETS,
+  TAAL_BY_ID,
+  TAALS,
+} from './data/taals'
 import { SurSaathAudioEngine } from './lib/audioEngine'
 import { clampTempo, clampUnitLevel, MAX_TEMPO, MIN_TEMPO } from './lib/music'
-import { DEFAULT_SETTINGS, loadSettings, saveSettings } from './lib/storage'
+import { loadSettings, saveSettings } from './lib/storage'
 import { registerTap } from './lib/tapTempo'
 import {
   TONICS,
@@ -24,22 +30,33 @@ import {
 
 function App() {
   const [settings, setSettings] = useState<AppSettings>(loadSettings)
+  const [initialEngineState] = useState(() => {
+    const taal = TAAL_BY_ID[settings.taalId]
+
+    return {
+      taal,
+      loop: getLoopById(taal, settings.loopId),
+      tonic: settings.tonic,
+    }
+  })
+
+  const selectedTaal = TAAL_BY_ID[settings.taalId]
+  const selectedLoop = getLoopById(selectedTaal, settings.loopId)
+
   const [playbackState, setPlaybackState] = useState<PlaybackState>('stopped')
   const [audioReady, setAudioReady] = useState(false)
-  const [currentPosition, setCurrentPosition] = useState<CyclePosition>({
+  const [currentPosition, setCurrentPosition] = useState<CyclePosition>(() => ({
     matra: 1,
     cycle: 1,
-    beat: TAAL_BY_ID[DEFAULT_SETTINGS.taalId].theka[0],
+    beat: initialEngineState.loop.beats[0],
     isSam: true,
-    isKhali: false,
+    isKhali: initialEngineState.taal.khali.includes(1),
     isVibhagStart: true,
-  })
+  }))
   const [tapCount, setTapCount] = useState(0)
 
   const audioEngineRef = useRef<SurSaathAudioEngine | null>(null)
   const tapHistoryRef = useRef<number[]>([])
-
-  const selectedTaal = TAAL_BY_ID[settings.taalId]
 
   const handleCyclePosition = useEffectEvent((position: CyclePosition) => {
     setCurrentPosition(position)
@@ -47,8 +64,9 @@ function App() {
 
   useEffect(() => {
     const engine = new SurSaathAudioEngine(
-      TAAL_BY_ID[DEFAULT_SETTINGS.taalId],
-      DEFAULT_SETTINGS.tonic,
+      initialEngineState.taal,
+      initialEngineState.loop,
+      initialEngineState.tonic,
     )
     engine.setOnCyclePosition(handleCyclePosition)
     audioEngineRef.current = engine
@@ -57,15 +75,15 @@ function App() {
       engine.dispose()
       audioEngineRef.current = null
     }
-  }, [])
+  }, [initialEngineState])
 
   useEffect(() => {
     saveSettings(settings)
   }, [settings])
 
   useEffect(() => {
-    audioEngineRef.current?.setTaal(selectedTaal)
-  }, [selectedTaal])
+    audioEngineRef.current?.setTaal(selectedTaal, selectedLoop)
+  }, [selectedLoop, selectedTaal])
 
   useEffect(() => {
     audioEngineRef.current?.setTonic(settings.tonic)
@@ -91,7 +109,7 @@ function App() {
     setCurrentPosition({
       matra: 1,
       cycle: 1,
-      beat: selectedTaal.theka[0],
+      beat: selectedLoop.beats[0],
       isSam: true,
       isKhali: selectedTaal.khali.includes(1),
       isVibhagStart: true,
@@ -154,17 +172,22 @@ function App() {
     }
 
     startTransition(() => {
+      const presetTaal = TAAL_BY_ID[preset.taalId]
+
       updateSettings((current) => ({
         ...current,
         taalId: preset.taalId,
+        loopId: preset.loopId ?? getDefaultLoop(presetTaal).id,
         tempo: preset.tempo,
         tonic: preset.tonic ?? current.tonic,
       }))
     })
   }
 
-  const currentBol = selectedTaal.theka[currentPosition.matra - 1]?.bol
-  const thekaPreview = selectedTaal.theka.map((beat) => beat.bol).join(' · ')
+  const currentBol = currentPosition.beat.label
+  const thekaPreview = selectedLoop.beats.map((beat) => beat.label).join(' · ')
+  const khaliLabel =
+    selectedTaal.khali.length > 0 ? selectedTaal.khali.join(', ') : 'None'
 
   return (
     <div className="app-shell">
@@ -190,7 +213,8 @@ function App() {
           <div className="hero-metric hero-metric--wide">
             <span>Now sounding</span>
             <strong>
-              {selectedTaal.name} · Matra {currentPosition.matra} · {currentBol}
+              {selectedTaal.name} · {selectedLoop.label} · Matra {currentPosition.matra} ·{' '}
+              {currentBol}
             </strong>
           </div>
           <div className="hero-badges">
@@ -208,6 +232,7 @@ function App() {
         <div className="app-grid__primary">
           <CycleTracker
             taal={selectedTaal}
+            loop={selectedLoop}
             currentMatra={currentPosition.matra}
             cycle={currentPosition.cycle}
             playbackState={playbackState}
@@ -315,19 +340,25 @@ function App() {
             />
           </SectionCard>
 
-          <SectionCard title="Taal Box" subtitle="Cycle selection and default theka">
+          <SectionCard
+            title="Taal Box"
+            subtitle="Cycle, style, and loop selection"
+          >
             <div className="taal-grid">
               <label className="select-field" htmlFor="taal-select">
                 <span>Choose taal</span>
                 <select
                   id="taal-select"
                   value={settings.taalId}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const nextTaal = TAAL_BY_ID[event.target.value]
+
                     updateSettings((current) => ({
                       ...current,
-                      taalId: event.target.value,
+                      taalId: nextTaal.id,
+                      loopId: getDefaultLoop(nextTaal).id,
                     }))
-                  }
+                  }}
                 >
                   {TAALS.map((taal) => (
                     <option key={taal.id} value={taal.id}>
@@ -337,15 +368,37 @@ function App() {
                 </select>
               </label>
 
+              <label className="select-field" htmlFor="loop-select">
+                <span>Loop / style</span>
+                <select
+                  id="loop-select"
+                  value={selectedLoop.id}
+                  onChange={(event) =>
+                    updateSettings((current) => ({
+                      ...current,
+                      loopId: event.target.value,
+                    }))
+                  }
+                >
+                  {selectedTaal.loops.map((loop) => (
+                    <option key={`${selectedTaal.id}-${loop.id}`} value={loop.id}>
+                      {loop.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               <div className="taal-summary">
                 <span>Total matras: {selectedTaal.totalMatras}</span>
                 <span>Vibhag: {selectedTaal.vibhags.join(' + ')}</span>
                 <span>Sam: {selectedTaal.sam}</span>
-                <span>Khali: {selectedTaal.khali.join(', ')}</span>
+                <span>Khali: {khaliLabel}</span>
+                <span>Loop: {selectedLoop.label}</span>
               </div>
             </div>
 
             <p className="support-copy">{selectedTaal.summary}</p>
+            <p className="support-copy support-copy--tight">{selectedLoop.summary}</p>
             <div className="theka-strip">{thekaPreview}</div>
 
             <SliderField

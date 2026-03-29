@@ -3,7 +3,7 @@
 SurSaath is a static React + TypeScript practice tool for Indian classical riyaaz. It runs fully in the browser and combines:
 
 - a warm tanpura-style drone with selectable tonic
-- a playable taal box for common taals with sample-mapped tabla strokes
+- a playable taal box with sample-mapped tabla strokes, multiple taals, and loop/style variants
 - live matra and vibhag tracking
 - tempo controls with tap tempo
 - local persistence for your last-used settings
@@ -50,7 +50,7 @@ If GitHub Pages is not already configured for the repository, set:
 
 ## Project structure
 
-- `src/data/taals.ts`: taal definitions, vibhag structure, theka data, presets
+- `src/data/taals.ts`: taal definitions, loop/style variants, vibhag structure, and presets
 - `src/lib/audioEngine.ts`: Tone.js scheduling, tanpura synthesis, and sample-mapped tabla playback
 - `src/lib/storage.ts`: local storage persistence
 - `src/components/`: UI building blocks
@@ -58,13 +58,43 @@ If GitHub Pages is not already configured for the repository, set:
 
 ## Editing taals and presets
 
-Add or adjust taals in `src/data/taals.ts`.
+Add or adjust taals, loop variants, and practice presets in `src/data/taals.ts`.
+
+Each taal can expose multiple loops through:
+
+- `defaultLoopId`
+- `loops[]`
+- `loop.id`, `loop.label`, `loop.summary`, and `loop.beats`
+
+Each beat stores a display label plus one or more scheduled tabla strokes, so swung addha, sitarkhani, tilwada, or ghazal-style loops can be represented without flattening everything to one bol per matra.
 
 The same file also contains the quick presets:
 
 - `Teentaal - Medium`
-- `Dadra - Light`
+- `Dadra - Ghazal`
 - `Keharwa - Fast`
+- `Addha - Thumri`
+- `Deepchandi - Ghazal`
+
+Current shipped taals:
+
+- Teentaal
+- Ektaal
+- Rupak
+- Jhaptal
+- Dadra
+- Keharwa
+- Tilwada
+- Jhoomra
+- Deepchandi
+- Dhamar
+- Chautaal
+- Ada Chautaal
+- Tevra
+- Addha
+- Pancham Savari
+- Bhajani
+- Punjabi / Sitarkhani
 
 To regenerate the shipped tabla clips from the source recording:
 
@@ -77,6 +107,7 @@ python3 scripts/extract_tabla_samples.py
 - The tanpura is synthesized in-browser, while the tabla layer uses a compact derived sample set rather than a full multi-velocity studio library.
 - Browser audio timing is solid for practice use, but it is not a replacement for dedicated hardware.
 - Audio must be started by user interaction because browsers block autoplay.
+- Some light-classical and ghazal-oriented loop variants are practical interpretations built from standard theka references rather than exact gharana-specific transcriptions.
 
 ## Audio asset attribution
 
@@ -84,7 +115,7 @@ The tabla one-shots in `public/audio/tabla/` are derived from the Wikimedia Comm
 
 ## Good next improvements
 
-- add more taals and alternate thekas
+- add per-loop swing and subdivision controls
 - add pitch reference for male/female tonic ranges
 - add sample-based tabla and tanpura sound sets
 - add lehra or tanpura fine-tuning options

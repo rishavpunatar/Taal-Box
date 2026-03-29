@@ -1,11 +1,12 @@
-import { TAAL_BY_ID } from '../data/taals'
+import { getLoopById, TAAL_BY_ID } from '../data/taals'
 import { TONICS, type AppSettings, type Tonic } from '../types/music'
 import { clampTempo, clampUnitLevel } from './music'
 
-const STORAGE_KEY = 'sursaath-settings-v1'
+const STORAGE_KEY = 'sursaath-settings-v2'
 
 export const DEFAULT_SETTINGS: AppSettings = {
   taalId: 'teentaal',
+  loopId: 'standard',
   tonic: 'C',
   tempo: 84,
   tanpuraVolume: 0.72,
@@ -29,12 +30,18 @@ export function loadSettings() {
     }
 
     const parsed = JSON.parse(raw) as Partial<AppSettings>
+    const taalId =
+      typeof parsed.taalId === 'string' && parsed.taalId in TAAL_BY_ID
+        ? parsed.taalId
+        : DEFAULT_SETTINGS.taalId
+    const loopId = getLoopById(
+      TAAL_BY_ID[taalId],
+      typeof parsed.loopId === 'string' ? parsed.loopId : undefined,
+    ).id
 
     return {
-      taalId:
-        typeof parsed.taalId === 'string' && parsed.taalId in TAAL_BY_ID
-          ? parsed.taalId
-          : DEFAULT_SETTINGS.taalId,
+      taalId,
+      loopId,
       tonic: isTonic(parsed.tonic) ? parsed.tonic : DEFAULT_SETTINGS.tonic,
       tempo:
         typeof parsed.tempo === 'number'

@@ -1,5 +1,12 @@
 import * as Tone from 'tone'
-import type { Bol, CyclePosition, TaalDefinition, Tonic } from '../types/music'
+import type {
+  Bol,
+  CyclePosition,
+  TaalBeat,
+  TaalDefinition,
+  TaalLoopVariant,
+  Tonic,
+} from '../types/music'
 import { getPerfectFifth, getVibhagStarts } from './music'
 
 const TANPURA_STROKE_OFFSETS = [0, 0.78, 1.56, 2.34] as const
@@ -18,6 +25,7 @@ function levelToDb(level: number) {
 
 export class SurSaathAudioEngine {
   private currentTaal: TaalDefinition
+  private currentLoop: TaalLoopVariant
   private currentTonic: Tonic
   private currentStepIndex = 0
   private currentCycle = 1
@@ -48,8 +56,9 @@ export class SurSaathAudioEngine {
   private matraEventId?: number
   private tanpuraEventId?: number
 
-  constructor(taal: TaalDefinition, tonic: Tonic) {
+  constructor(taal: TaalDefinition, loop: TaalLoopVariant, tonic: Tonic) {
     this.currentTaal = taal
+    this.currentLoop = loop
     this.currentTonic = tonic
   }
 
@@ -294,8 +303,9 @@ export class SurSaathAudioEngine {
     this.currentTonic = tonic
   }
 
-  setTaal(taal: TaalDefinition) {
+  setTaal(taal: TaalDefinition, loop: TaalLoopVariant) {
     this.currentTaal = taal
+    this.currentLoop = loop
     this.reset()
     this.emitIdlePosition()
   }
@@ -336,7 +346,7 @@ export class SurSaathAudioEngine {
   }
 
   private emitIdlePosition() {
-    const firstBeat = this.currentTaal.theka[0]
+    const firstBeat = this.currentLoop.beats[0]
 
     this.onCyclePosition?.({
       matra: 1,
@@ -363,14 +373,14 @@ export class SurSaathAudioEngine {
   }
 
   private playCurrentMatra(time: number) {
-    const beat = this.currentTaal.theka[this.currentStepIndex]
+    const beat = this.currentLoop.beats[this.currentStepIndex]
     const matra = this.currentStepIndex + 1
     const vibhagStarts = getVibhagStarts(this.currentTaal)
     const isSam = matra === this.currentTaal.sam
     const isKhali = this.currentTaal.khali.includes(matra)
     const isVibhagStart = vibhagStarts.includes(matra)
 
-    this.triggerBol(beat.bol, time, {
+    this.triggerBeat(beat, time, {
       isSam,
       isKhali,
       isVibhagStart,
@@ -387,13 +397,38 @@ export class SurSaathAudioEngine {
       })
     }, time)
 
-    if (this.currentStepIndex === this.currentTaal.totalMatras - 1) {
+    if (this.currentStepIndex === this.currentLoop.beats.length - 1) {
       this.currentStepIndex = 0
       this.currentCycle += 1
       return
     }
 
     this.currentStepIndex += 1
+  }
+
+  private triggerBeat(
+    beat: TaalBeat,
+    time: number,
+    emphasis: {
+      isSam: boolean
+      isKhali: boolean
+      isVibhagStart: boolean
+    },
+  ) {
+    const matraSeconds = Tone.Time('4n').toSeconds()
+
+    beat.strokes.forEach((stroke, index) => {
+      const defaultOffset =
+        beat.strokes.length > 1 ? index / beat.strokes.length : 0
+      const velocityScale = stroke.velocity ?? (index === 0 ? 1 : 0.74)
+
+      this.triggerBol(
+        stroke.bol,
+        time + matraSeconds * (stroke.offset ?? defaultOffset),
+        emphasis,
+        velocityScale,
+      )
+    })
   }
 
   private playTanpuraCycle(time: number) {
@@ -442,14 +477,16 @@ export class SurSaathAudioEngine {
       isKhali: boolean
       isVibhagStart: boolean
     },
+    velocityScale = 1,
   ) {
-    const velocity = emphasis.isSam
+    const baseVelocity = emphasis.isSam
       ? 1
       : emphasis.isKhali
         ? 0.74
         : emphasis.isVibhagStart
           ? 0.88
           : 0.78
+    const velocity = Math.min(1, Math.max(0.05, baseVelocity * velocityScale))
 
     if (this.tablaSamplerLoaded) {
       this.triggerTablaBol(bol, time, velocity, emphasis)
