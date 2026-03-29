@@ -249,10 +249,23 @@
 
 .beat-chip--sam {
   border-color: rgba(231, 164, 68, 0.48);
+  background:
+    linear-gradient(180deg, rgba(231, 164, 68, 0.18), rgba(11, 14, 20, 0.94)),
+    rgba(11, 14, 20, 0.92);
+  box-shadow: inset 0 0 0 1px rgba(231, 164, 68, 0.18);
 }
 
 .beat-chip--khali {
   border-color: rgba(103, 171, 157, 0.38);
+  background:
+    linear-gradient(180deg, rgba(103, 171, 157, 0.14), rgba(11, 14, 20, 0.94)),
+    rgba(11, 14, 20, 0.92);
+  box-shadow: inset 0 0 0 1px rgba(103, 171, 157, 0.14);
+}
+
+.beat-chip--vibhag-start {
+  transform: translateY(-1px);
+  border-color: rgba(255, 244, 214, 0.12);
 }
 
 .beat-chip--active {
@@ -266,6 +279,13 @@
 .beat-chip__number {
   font-size: 0.92rem;
   color: var(--color-text-subtle);
+}
+
+.beat-chip--sam .beat-chip__number,
+.beat-chip--khali .beat-chip__number {
+  font-size: 1.08rem;
+  font-weight: 700;
+  color: var(--color-text-strong);
 }
 
 .beat-chip__bol {

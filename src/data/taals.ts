@@ -258,6 +258,8 @@ export const TAALS: TaalDefinition[] = [
           loop: true,
           loopStartSeconds: 3.77,
           loopEndSeconds: 6.77,
+          accentBeats: [1, 4],
+          accentGain: 0.82,
         },
       ),
       loop(

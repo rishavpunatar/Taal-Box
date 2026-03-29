@@ -520,6 +520,10 @@ export class SurSaathAudioEngine {
     )
   }
 
+  private shouldAccentLoopBeat(matra: number) {
+    return this.currentLoop.audioLoop?.accentBeats?.includes(matra) ?? false
+  }
+
   private playCurrentMatra(time: number) {
     const beat = this.currentLoop.beats[this.currentStepIndex]
     const matra = this.currentStepIndex + 1
@@ -542,6 +546,18 @@ export class SurSaathAudioEngine {
         isKhali,
         isVibhagStart,
       }, transitionFill)
+    } else if (this.shouldAccentLoopBeat(matra)) {
+      this.triggerBeat(
+        beat,
+        time,
+        {
+          isSam,
+          isKhali,
+          isVibhagStart,
+        },
+        [],
+        this.currentLoop.audioLoop?.accentGain ?? 0.76,
+      )
     }
     this.playTapLoopBeat(time)
 
@@ -574,6 +590,7 @@ export class SurSaathAudioEngine {
       isVibhagStart: boolean
     },
     extraStrokes: TaalStroke[] = [],
+    beatVelocityScale = 1,
   ) {
     const matraSeconds = Tone.Time('4n').toSeconds()
     const scheduledStrokes = [...beat.strokes, ...extraStrokes]
@@ -589,7 +606,7 @@ export class SurSaathAudioEngine {
         stroke.bol,
         time + matraSeconds * (stroke.offset ?? defaultOffset),
         emphasis,
-        velocityScale,
+        velocityScale * beatVelocityScale,
       )
     })
   }

@@ -73,6 +73,7 @@ export function CycleTracker({
                   const isActive = matra === currentMatra
                   const isSam = matra === taal.sam
                   const isKhali = taal.khali.includes(matra)
+                  const isVibhagStart = vibhagStarts.includes(matra)
 
                   return (
                     <div
@@ -80,6 +81,7 @@ export function CycleTracker({
                       className={[
                         'beat-chip',
                         isActive ? 'beat-chip--active' : '',
+                        isVibhagStart ? 'beat-chip--vibhag-start' : '',
                         isSam ? 'beat-chip--sam' : '',
                         isKhali ? 'beat-chip--khali' : '',
                       ]

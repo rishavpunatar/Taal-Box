@@ -49,6 +49,8 @@ export interface TaalLoopAudio {
   loop?: boolean
   loopStartSeconds?: number
   loopEndSeconds?: number
+  accentBeats?: number[]
+  accentGain?: number
 }
 
 export interface TaalLoopVariant {
