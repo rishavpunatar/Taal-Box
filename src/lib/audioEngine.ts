@@ -3,12 +3,14 @@ import type {
   Bol,
   CyclePosition,
   TaalBeat,
+  TaalLoopAudio,
   TaalDefinition,
   TaalLoopVariant,
   TapLoopPattern,
   TaalStroke,
   Tonic,
 } from '../types/music'
+import { TAALS } from '../data/taals'
 import { getPerfectFifth, getVibhagStarts } from './music'
 import { getTransitionFill } from './transitionFills'
 
@@ -24,6 +26,10 @@ const TABLA_SAMPLE_NOTES = {
 
 function levelToDb(level: number) {
   return Tone.gainToDb(Math.max(level, 0.0001))
+}
+
+function getPlaybackRate(bpm: number, sourceBpm: number) {
+  return bpm / Math.max(sourceBpm, 1)
 }
 
 export class SurSaathAudioEngine {
@@ -56,6 +62,8 @@ export class SurSaathAudioEngine {
   private noise!: Tone.NoiseSynth
   private tablaSampler!: Tone.Sampler
   private tablaSamplerLoaded = false
+  private loopPlayers = new Map<string, Tone.Player>()
+  private activeLoopPlayer: Tone.Player | null = null
   private tapLoop: TapLoopPattern | null = null
 
   private matraEventId?: number
@@ -228,7 +236,10 @@ export class SurSaathAudioEngine {
       this.tanpuraReverb.generate(),
       this.percussionReverb.generate(),
       samplerReady,
+      this.preloadLoopPlayers(),
     ])
+
+    await this.prepareCurrentLoopAudio()
 
     this.matraEventId = Tone.Transport.scheduleRepeat(
       (time) => this.playCurrentMatra(time),
@@ -244,6 +255,7 @@ export class SurSaathAudioEngine {
 
   async start() {
     await this.ensureReady()
+    await this.prepareCurrentLoopAudio()
 
     if (Tone.Transport.state === 'started') {
       return
@@ -293,6 +305,7 @@ export class SurSaathAudioEngine {
 
   setTempo(bpm: number) {
     Tone.Transport.bpm.rampTo(bpm, 0.15)
+    this.updateActiveLoopPlaybackRate(bpm)
   }
 
   setTanpuraVolume(level: number) {
@@ -316,10 +329,15 @@ export class SurSaathAudioEngine {
   }
 
   setTaal(taal: TaalDefinition, loop: TaalLoopVariant) {
+    this.deactivateLoopPlayer()
     this.currentTaal = taal
     this.currentLoop = loop
     this.reset()
     this.emitIdlePosition()
+
+    if (this.initialized) {
+      void this.prepareCurrentLoopAudio()
+    }
   }
 
   setTapLoop(tapLoop: TapLoopPattern | null) {
@@ -359,6 +377,13 @@ export class SurSaathAudioEngine {
       this.ring.dispose()
       this.metallic.dispose()
       this.noise.dispose()
+      this.loopPlayers.forEach((player) => {
+        player.unsync()
+        player.stop()
+        player.dispose()
+      })
+      this.loopPlayers.clear()
+      this.activeLoopPlayer = null
     }
   }
 
@@ -391,6 +416,108 @@ export class SurSaathAudioEngine {
     this.tanpuraShimmer.releaseAll()
   }
 
+  private getLoopAudioUrl(audioLoop: TaalLoopAudio) {
+    return `${import.meta.env.BASE_URL}${audioLoop.url.replace(/^\/+/, '')}`
+  }
+
+  private async createLoopPlayer(audioLoop: TaalLoopAudio) {
+    return new Promise<Tone.Player>((resolve) => {
+      const player = new Tone.Player({
+        url: this.getLoopAudioUrl(audioLoop),
+        loop: audioLoop.loop ?? true,
+        fadeIn: 0.01,
+        fadeOut: 0.04,
+        onload: () => resolve(player),
+        onerror: () => resolve(player),
+      }).connect(this.percussionBus)
+    })
+  }
+
+  private async preloadLoopPlayers() {
+    const loopSources = new Map<string, TaalLoopAudio>()
+
+    TAALS.forEach((taal) => {
+      taal.loops.forEach((loop) => {
+        if (loop.audioLoop) {
+          loopSources.set(loop.audioLoop.url, loop.audioLoop)
+        }
+      })
+    })
+
+    await Promise.all(
+      [...loopSources.values()].map(async (audioLoop) => {
+        if (this.loopPlayers.has(audioLoop.url)) {
+          return
+        }
+
+        const player = await this.createLoopPlayer(audioLoop)
+        this.loopPlayers.set(audioLoop.url, player)
+      }),
+    )
+  }
+
+  private deactivateLoopPlayer() {
+    if (!this.activeLoopPlayer) {
+      return
+    }
+
+    this.activeLoopPlayer.unsync()
+    this.activeLoopPlayer.stop()
+    this.activeLoopPlayer = null
+  }
+
+  private updateActiveLoopPlaybackRate(bpm: number) {
+    if (!this.activeLoopPlayer || !this.currentLoop.audioLoop) {
+      return
+    }
+
+    this.activeLoopPlayer.playbackRate =
+      bpm / Math.max(this.currentLoop.audioLoop.sourceBpm, 1)
+  }
+
+  private activateLoopPlayer(player: Tone.Player, audioLoop: TaalLoopAudio) {
+    if (this.activeLoopPlayer && this.activeLoopPlayer !== player) {
+      this.deactivateLoopPlayer()
+    }
+
+    player.unsync()
+    player.stop()
+    player.loop = audioLoop.loop ?? true
+    player.playbackRate = getPlaybackRate(Tone.Transport.bpm.value, audioLoop.sourceBpm)
+    player.sync().start(0)
+    this.activeLoopPlayer = player
+  }
+
+  private async prepareCurrentLoopAudio() {
+    if (!this.initialized) {
+      return
+    }
+
+    const audioLoop = this.currentLoop.audioLoop
+
+    if (!audioLoop) {
+      this.deactivateLoopPlayer()
+      return
+    }
+
+    let player = this.loopPlayers.get(audioLoop.url)
+
+    if (!player) {
+      player = await this.createLoopPlayer(audioLoop)
+      this.loopPlayers.set(audioLoop.url, player)
+    }
+
+    this.activateLoopPlayer(player, audioLoop)
+  }
+
+  private isLoopAudioReplacingPercussion() {
+    return (
+      this.currentLoop.audioLoop?.mode === 'replace' &&
+      this.activeLoopPlayer !== null &&
+      this.activeLoopPlayer.loaded
+    )
+  }
+
   private playCurrentMatra(time: number) {
     const beat = this.currentLoop.beats[this.currentStepIndex]
     const matra = this.currentStepIndex + 1
@@ -407,11 +534,13 @@ export class SurSaathAudioEngine {
           )
         : []
 
-    this.triggerBeat(beat, time, {
-      isSam,
-      isKhali,
-      isVibhagStart,
-    }, transitionFill)
+    if (!this.isLoopAudioReplacingPercussion()) {
+      this.triggerBeat(beat, time, {
+        isSam,
+        isKhali,
+        isVibhagStart,
+      }, transitionFill)
+    }
     this.playTapLoopBeat(time)
 
     Tone.Draw.schedule(() => {

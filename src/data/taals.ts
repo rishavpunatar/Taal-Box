@@ -2,6 +2,7 @@ import type {
   Bol,
   PracticePreset,
   TaalBeat,
+  TaalLoopAudio,
   TaalDefinition,
   TaalLoopVariant,
   TaalStroke,
@@ -49,11 +50,13 @@ const loop = (
   label: string,
   summary: string,
   beats: TaalBeat[],
+  audioLoop?: TaalLoopAudio,
 ): TaalLoopVariant => ({
   id,
   label,
   summary,
   beats,
+  ...(audioLoop ? { audioLoop } : {}),
 })
 
 const taal = (definition: TaalDefinition): TaalDefinition => {
@@ -239,7 +242,7 @@ export const TAALS: TaalDefinition[] = [
       loop(
         'ghazal',
         'Ghazal',
-        'A lighter dadra phrasing built around the commonly taught ghazal-friendly shape.',
+        'A lighter dadra phrasing backed by a bundled live ghazal-style loop recording.',
         [
           matra('Dha', 'Dha'),
           matra('Dhi', 'Dhi'),
@@ -248,6 +251,12 @@ export const TAALS: TaalDefinition[] = [
           matra('Tu', 'Tu'),
           matra('Na', 'Na'),
         ],
+        {
+          url: 'audio/loops/dadra-ghazal-live.mp3',
+          sourceBpm: 120,
+          mode: 'replace',
+          loop: true,
+        },
       ),
       loop(
         'light',

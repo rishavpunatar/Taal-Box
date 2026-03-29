@@ -42,11 +42,19 @@ export interface TaalBeat {
   strokes: TaalStroke[]
 }
 
+export interface TaalLoopAudio {
+  url: string
+  sourceBpm: number
+  mode?: 'replace' | 'layer'
+  loop?: boolean
+}
+
 export interface TaalLoopVariant {
   id: string
   label: string
   summary: string
   beats: TaalBeat[]
+  audioLoop?: TaalLoopAudio
 }
 
 export interface TaalDefinition {
