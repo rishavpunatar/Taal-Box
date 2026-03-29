@@ -3,7 +3,7 @@
 SurSaath is a static React + TypeScript practice tool for Indian classical riyaaz. It runs fully in the browser and combines:
 
 - a warm tanpura-style drone with selectable tonic
-- a playable taal box for common taals
+- a playable taal box for common taals with sample-mapped tabla strokes
 - live matra and vibhag tracking
 - tempo controls with tap tempo
 - local persistence for your last-used settings
@@ -51,9 +51,10 @@ If GitHub Pages is not already configured for the repository, set:
 ## Project structure
 
 - `src/data/taals.ts`: taal definitions, vibhag structure, theka data, presets
-- `src/lib/audioEngine.ts`: Tone.js scheduling and synthesized tanpura/taal playback
+- `src/lib/audioEngine.ts`: Tone.js scheduling, tanpura synthesis, and sample-mapped tabla playback
 - `src/lib/storage.ts`: local storage persistence
 - `src/components/`: UI building blocks
+- `public/audio/tabla/`: derived tabla one-shots used by the taal engine
 
 ## Editing taals and presets
 
@@ -65,11 +66,21 @@ The same file also contains the quick presets:
 - `Dadra - Light`
 - `Keharwa - Fast`
 
+To regenerate the shipped tabla clips from the source recording:
+
+```bash
+python3 scripts/extract_tabla_samples.py
+```
+
 ## Limitations
 
-- The tabla and tanpura timbres are synthesized in-browser rather than sample-based.
+- The tanpura is synthesized in-browser, while the tabla layer uses a compact derived sample set rather than a full multi-velocity studio library.
 - Browser audio timing is solid for practice use, but it is not a replacement for dedicated hardware.
 - Audio must be started by user interaction because browsers block autoplay.
+
+## Audio asset attribution
+
+The tabla one-shots in `public/audio/tabla/` are derived from the Wikimedia Commons file `Tabla drums demo.oga` by `tabladrumsonline`, licensed under CC BY-SA 3.0. See `public/audio/tabla/ATTRIBUTION.md`.
 
 ## Good next improvements
 

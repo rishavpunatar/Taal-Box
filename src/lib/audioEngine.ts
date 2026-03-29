@@ -4,6 +4,13 @@ import { getPerfectFifth, getVibhagStarts } from './music'
 
 const TANPURA_STROKE_OFFSETS = [0, 0.78, 1.56, 2.34] as const
 const TANPURA_CYCLE_SECONDS = 3.12
+const TABLA_SAMPLE_BASE_URL = `${import.meta.env.BASE_URL}audio/tabla/`
+const TABLA_SAMPLE_NOTES = {
+  bass: 'C3',
+  open: 'D3',
+  bright: 'E3',
+  muted: 'F3',
+} as const
 
 function levelToDb(level: number) {
   return Tone.gainToDb(Math.max(level, 0.0001))
@@ -35,6 +42,8 @@ export class SurSaathAudioEngine {
   private ring!: Tone.Synth
   private metallic!: Tone.MetalSynth
   private noise!: Tone.NoiseSynth
+  private tablaSampler!: Tone.Sampler
+  private tablaSamplerLoaded = false
 
   private matraEventId?: number
   private tanpuraEventId?: number
@@ -171,10 +180,33 @@ export class SurSaathAudioEngine {
       },
       volume: -15,
     }).connect(this.percussionNoiseFilter)
+    const samplerReady = new Promise<void>((resolve) => {
+      this.tablaSampler = new Tone.Sampler({
+        urls: {
+          [TABLA_SAMPLE_NOTES.bass]: 'bayan-ge.wav',
+          [TABLA_SAMPLE_NOTES.open]: 'dayan-open.wav',
+          [TABLA_SAMPLE_NOTES.bright]: 'dayan-bright.wav',
+          [TABLA_SAMPLE_NOTES.muted]: 'dayan-muted.wav',
+        },
+        baseUrl: TABLA_SAMPLE_BASE_URL,
+        attack: 0,
+        release: 0.18,
+        curve: 'exponential',
+        onload: () => {
+          this.tablaSamplerLoaded = true
+          resolve()
+        },
+        onerror: () => {
+          this.tablaSamplerLoaded = false
+          resolve()
+        },
+      }).connect(this.percussionBus)
+    })
 
     await Promise.all([
       this.tanpuraReverb.generate(),
       this.percussionReverb.generate(),
+      samplerReady,
     ])
 
     this.matraEventId = Tone.Transport.scheduleRepeat(
@@ -294,6 +326,7 @@ export class SurSaathAudioEngine {
       this.percussionReverb.dispose()
       this.percussionVolume.dispose()
       this.percussionNoiseFilter.dispose()
+      this.tablaSampler.dispose()
       this.bayan.dispose()
       this.dayan.dispose()
       this.ring.dispose()
@@ -418,6 +451,11 @@ export class SurSaathAudioEngine {
           ? 0.88
           : 0.78
 
+    if (this.tablaSamplerLoaded) {
+      this.triggerTablaBol(bol, time, velocity, emphasis)
+      return
+    }
+
     switch (bol) {
       case 'Dha':
         this.bayan.triggerAttackRelease('C2', '8n', time, velocity)
@@ -472,5 +510,168 @@ export class SurSaathAudioEngine {
       default:
         this.ring.triggerAttackRelease('A4', '32n', time, velocity * 0.36)
     }
+  }
+
+  private triggerTablaBol(
+    bol: Bol,
+    time: number,
+    velocity: number,
+    emphasis: {
+      isSam: boolean
+      isKhali: boolean
+      isVibhagStart: boolean
+    },
+  ) {
+    const accentBoost = emphasis.isSam
+      ? 1
+      : emphasis.isKhali
+        ? 0.92
+        : emphasis.isVibhagStart
+          ? 0.96
+          : 0.9
+
+    switch (bol) {
+      case 'Dha':
+        this.playTablaSample(TABLA_SAMPLE_NOTES.bass, '8n', time, velocity)
+        this.playTablaSample(
+          TABLA_SAMPLE_NOTES.bright,
+          '16n',
+          time,
+          velocity * accentBoost,
+        )
+        break
+      case 'Dhin':
+        this.playTablaSample(TABLA_SAMPLE_NOTES.bass, '8n', time, velocity * 0.96)
+        this.playTablaSample(
+          TABLA_SAMPLE_NOTES.open,
+          '8n',
+          time,
+          velocity * accentBoost,
+        )
+        break
+      case 'Dhi':
+        this.playTablaSample(
+          TABLA_SAMPLE_NOTES.open,
+          '16n',
+          time,
+          velocity * 0.84,
+        )
+        break
+      case 'Tin':
+        this.playTablaSample(
+          TABLA_SAMPLE_NOTES.open,
+          '8n',
+          time,
+          velocity * accentBoost,
+        )
+        break
+      case 'Na':
+        this.playTablaSample(
+          TABLA_SAMPLE_NOTES.bright,
+          '16n',
+          time,
+          velocity * 0.86,
+        )
+        break
+      case 'Ta':
+        this.playTablaSample(
+          TABLA_SAMPLE_NOTES.muted,
+          '32n',
+          time,
+          velocity * 0.8,
+        )
+        break
+      case 'Ge':
+        this.playTablaSample(
+          TABLA_SAMPLE_NOTES.bass,
+          '8n',
+          time,
+          velocity * 0.92,
+        )
+        break
+      case 'Tu':
+        this.playTablaSample(
+          TABLA_SAMPLE_NOTES.muted,
+          '16n',
+          time,
+          velocity * 0.76,
+        )
+        break
+      case 'Tun':
+        this.playTablaSample(
+          TABLA_SAMPLE_NOTES.open,
+          '4n',
+          time,
+          velocity * 0.94,
+        )
+        break
+      case 'Ka':
+        this.playTablaSample(
+          TABLA_SAMPLE_NOTES.muted,
+          '64n',
+          time,
+          velocity * 0.72,
+        )
+        break
+      case 'Ti':
+        this.playTablaSample(
+          TABLA_SAMPLE_NOTES.muted,
+          '32n',
+          time,
+          velocity * 0.74,
+        )
+        break
+      case 'Re':
+        this.playTablaSample(
+          TABLA_SAMPLE_NOTES.muted,
+          '64n',
+          time,
+          velocity * 0.66,
+        )
+        break
+      case 'Ki':
+        this.playTablaSample(
+          TABLA_SAMPLE_NOTES.muted,
+          '64n',
+          time,
+          velocity * 0.66,
+        )
+        break
+      case 'Kat':
+        this.playTablaSample(
+          TABLA_SAMPLE_NOTES.muted,
+          '64n',
+          time,
+          velocity * 0.74,
+        )
+        this.playTablaSample(
+          TABLA_SAMPLE_NOTES.muted,
+          '64n',
+          time + 0.018,
+          velocity * 0.52,
+        )
+        break
+      default:
+        this.playTablaSample(
+          TABLA_SAMPLE_NOTES.open,
+          '16n',
+          time,
+          velocity * 0.8,
+        )
+    }
+  }
+
+  private playTablaSample(
+    note: string,
+    duration: string,
+    time: number,
+    velocity: number,
+  ) {
+    this.tablaSampler.triggerAttackRelease(
+      note,
+      duration,
+      time,
+      Math.min(1, Math.max(0.05, velocity)),
+    )
   }
 }
