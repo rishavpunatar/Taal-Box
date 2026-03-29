@@ -31,7 +31,7 @@ export function getPerfectFifth(tonic: Tonic) {
   return TONIC_ORDER[(index + 7) % TONIC_ORDER.length]
 }
 
-export function getVibhagStarts(taal: TaalDefinition) {
+export function getVibhagStarts(taal: Pick<TaalDefinition, 'vibhags'>) {
   const starts: number[] = []
   let cursor = 1
 

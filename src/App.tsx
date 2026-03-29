@@ -86,14 +86,15 @@ function App() {
 
   const finalizeTapLoopCapture = (loopEndAt?: number) => {
     clearTapLoopFinalizeTimeout()
+    const captureStartedAt = tapLoopHistoryRef.current[0]
 
     const completedPattern = finalizeTapLoop({
       taps: tapLoopHistoryRef.current,
-      beatCount: selectedLoop.beats.length,
       fallbackTempo: settings.tempo,
-      sourceTaalId: selectedTaal.id,
-      sourceLoopId: selectedLoop.id,
-      loopEndAt,
+      captureDurationMs:
+        captureStartedAt !== undefined && loopEndAt !== undefined
+          ? loopEndAt - captureStartedAt
+          : undefined,
     })
 
     tapLoopHistoryRef.current = []
@@ -227,7 +228,7 @@ function App() {
     cancelPendingTapLoopCapture()
   }
 
-  const handleTapLoopTap = async () => {
+  const handleTapLoopTap = () => {
     const now = performance.now()
     const isNewCapture = tapLoopState !== 'capturing'
 
@@ -244,11 +245,6 @@ function App() {
     tapLoopFinalizeTimeoutRef.current = window.setTimeout(() => {
       finalizeTapLoopCapture()
     }, TAP_LOOP_IDLE_MS)
-
-    if (audioEngineRef.current) {
-      await audioEngineRef.current.previewTapLoopHit()
-      setAudioReady(true)
-    }
   }
 
   const handleFinishTapLoop = () => {
@@ -272,7 +268,6 @@ function App() {
 
     startTransition(() => {
       const presetTaal = TAAL_BY_ID[preset.taalId]
-      clearTapLoopOverlay()
 
       updateSettings((current) => ({
         ...current,
@@ -291,10 +286,10 @@ function App() {
   const tapLoopPreview = tapLoopPattern ? formatTapLoopPreview(tapLoopPattern) : ''
   const tapLoopSummary =
     tapLoopState === 'capturing'
-      ? `${tapLoopTapCount} ${tapLoopTapCount === 1 ? 'tap' : 'taps'} captured. Pause briefly or press Finish to lock the phrase.`
+      ? `${tapLoopTapCount} ${tapLoopTapCount === 1 ? 'tap' : 'taps'} captured silently. Pause briefly or press Finish to infer a loop.`
       : tapLoopPattern
-        ? `${tapLoopPattern.tapCount} hits repeating across ${tapLoopPattern.beatCount} matras at ${tapLoopPattern.bpm} BPM.`
-        : 'Tap the phrase you want to double over the current cycle. A short pause turns it into a repeating overlay.'
+        ? `${tapLoopPattern.tapCount} hits inferred as an independent ${tapLoopPattern.beatCount}-beat tabla loop at ${tapLoopPattern.bpm} BPM.${tapLoopPattern.observedCycles > 1 ? ` Collapsed from ${tapLoopPattern.observedCycles} captured cycles.` : ''}`
+        : 'Tap any phrase in silence. SurSaath will infer its own repeating tabla loop, choose bols for the taps, and set the pace from what you played.'
   const tapLoopLabel =
     tapLoopState === 'capturing'
       ? 'Capturing'
@@ -310,7 +305,8 @@ function App() {
           <h1>Tanpura and taal support for focused riyaaz.</h1>
           <p className="hero-panel__lead">
             Static, browser-based practice support with a warm tanpura layer,
-            usable taal playback, tap-loop capture, and live cycle tracking.
+            usable taal playback, independent tap-loop capture, and live cycle
+            tracking.
           </p>
         </div>
 
@@ -387,8 +383,8 @@ function App() {
                   <span>Current BPM</span>
                   <strong>{settings.tempo}</strong>
                   <small>
-                    Tempo slider stays available, but tap-loop capture can now
-                    set the loop pace from the phrase you play.
+                    Tempo slider stays available, but an inferred tap loop can
+                    set the pace from the phrase you play.
                   </small>
                 </div>
                 <SliderField
@@ -424,7 +420,7 @@ function App() {
                       ]
                         .filter(Boolean)
                         .join(' ')}
-                      onClick={() => void handleTapLoopTap()}
+                      onClick={handleTapLoopTap}
                     >
                       {tapLoopState === 'capturing'
                         ? 'Tap Phrase'
@@ -442,7 +438,8 @@ function App() {
 
                   {tapLoopPattern ? (
                     <div className="tap-loop-preview">
-                      Positions: {tapLoopPreview}
+                      Inferred cycle: {tapLoopPattern.vibhags.join(' + ')}.
+                      {' '}Bols: {tapLoopPreview}
                     </div>
                   ) : null}
                 </div>
@@ -505,7 +502,6 @@ function App() {
                   value={settings.taalId}
                   onChange={(event) => {
                     const nextTaal = TAAL_BY_ID[event.target.value]
-                    clearTapLoopOverlay()
 
                     updateSettings((current) => ({
                       ...current,
@@ -528,7 +524,6 @@ function App() {
                   id="loop-select"
                   value={selectedLoop.id}
                   onChange={(event) => {
-                    clearTapLoopOverlay()
                     updateSettings((current) => ({
                       ...current,
                       loopId: event.target.value,

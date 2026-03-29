@@ -74,14 +74,15 @@ export interface PracticePreset {
 export interface TapLoopHit {
   offsetBeats: number
   velocity: number
+  bol: Bol
 }
 
 export interface TapLoopPattern {
   beatCount: number
+  vibhags: number[]
   bpm: number
   tapCount: number
-  sourceTaalId: string
-  sourceLoopId: string
+  observedCycles: number
   hits: TapLoopHit[]
 }
 

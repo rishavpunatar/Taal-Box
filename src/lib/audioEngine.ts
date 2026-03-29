@@ -31,6 +31,7 @@ export class SurSaathAudioEngine {
   private currentLoop: TaalLoopVariant
   private currentTonic: Tonic
   private currentStepIndex = 0
+  private tapLoopStepIndex = 0
   private currentCycle = 1
   private initialized = false
   private onCyclePosition?: (position: CyclePosition) => void
@@ -323,11 +324,7 @@ export class SurSaathAudioEngine {
 
   setTapLoop(tapLoop: TapLoopPattern | null) {
     this.tapLoop = tapLoop
-  }
-
-  async previewTapLoopHit() {
-    await this.ensureReady()
-    this.triggerTapLoopHit(Tone.now() + 0.01, 0.82)
+    this.tapLoopStepIndex = 0
   }
 
   dispose() {
@@ -380,6 +377,7 @@ export class SurSaathAudioEngine {
 
   private resetPosition() {
     this.currentStepIndex = 0
+    this.tapLoopStepIndex = 0
     this.currentCycle = 1
     this.emitIdlePosition()
   }
@@ -414,7 +412,7 @@ export class SurSaathAudioEngine {
       isKhali,
       isVibhagStart,
     }, transitionFill)
-    this.triggerTapLoopWindow(time)
+    this.playTapLoopBeat(time)
 
     Tone.Draw.schedule(() => {
       this.onCyclePosition?.({
@@ -508,45 +506,58 @@ export class SurSaathAudioEngine {
     })
   }
 
-  private triggerTapLoopWindow(time: number) {
-    if (!this.tapLoop || this.tapLoop.beatCount !== this.currentLoop.beats.length) {
+  private getTapLoopKhaliMatra() {
+    if (!this.tapLoop) {
+      return null
+    }
+
+    const vibhagStarts = getVibhagStarts({ vibhags: this.tapLoop.vibhags })
+
+    if (vibhagStarts.length < 2) {
+      return null
+    }
+
+    const midpoint = Math.ceil(this.tapLoop.beatCount / 2)
+
+    return (
+      vibhagStarts.find(
+        (start, index) => index > 0 && Math.abs(start - midpoint) <= 1,
+      ) ?? null
+    )
+  }
+
+  private playTapLoopBeat(time: number) {
+    if (!this.tapLoop) {
       return
     }
 
-    const beatStart = this.currentStepIndex
+    const beatStart = this.tapLoopStepIndex
     const beatEnd = beatStart + 1
+    const matra = beatStart + 1
     const matraSeconds = Tone.Time('4n').toSeconds()
+    const vibhagStarts = getVibhagStarts({ vibhags: this.tapLoop.vibhags })
+    const khaliMatra = this.getTapLoopKhaliMatra()
+    const emphasis = {
+      isSam: matra === 1,
+      isKhali: khaliMatra === matra,
+      isVibhagStart: vibhagStarts.includes(matra),
+    }
 
-    this.tapLoop.hits.forEach((hit, index) => {
+    this.tapLoop.hits.forEach((hit) => {
       if (hit.offsetBeats < beatStart || hit.offsetBeats >= beatEnd) {
         return
       }
 
       const hitTime = time + (hit.offsetBeats - beatStart) * matraSeconds
-      const velocity = hit.velocity * (index === 0 ? 0.96 : 0.78)
-      this.triggerTapLoopHit(hitTime, velocity)
+      this.triggerBol(hit.bol, hitTime, emphasis, hit.velocity * 0.88)
     })
-  }
 
-  private triggerTapLoopHit(time: number, velocity: number) {
-    if (this.tablaSamplerLoaded) {
-      this.playTablaSample(
-        TABLA_SAMPLE_NOTES.muted,
-        '64n',
-        time,
-        velocity * 0.78,
-      )
-      this.playTablaSample(
-        TABLA_SAMPLE_NOTES.bright,
-        '64n',
-        time + 0.012,
-        velocity * 0.4,
-      )
+    if (this.tapLoopStepIndex === this.tapLoop.beatCount - 1) {
+      this.tapLoopStepIndex = 0
       return
     }
 
-    this.metallic.triggerAttackRelease('64n', time, velocity * 0.44)
-    this.noise.triggerAttackRelease('64n', time, velocity * 0.32)
+    this.tapLoopStepIndex += 1
   }
 
   private triggerBol(
