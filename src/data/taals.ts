@@ -1,6 +1,5 @@
 import type {
   Bol,
-  PracticePreset,
   TaalBeat,
   TaalLoopAudio,
   TaalDefinition,
@@ -783,51 +782,3 @@ export function getDefaultLoop(taalItem: TaalDefinition) {
 export function getLoopById(taalItem: TaalDefinition, loopId?: string) {
   return taalItem.loops.find((item) => item.id === loopId) ?? getDefaultLoop(taalItem)
 }
-
-export const PRESETS: PracticePreset[] = [
-  {
-    id: 'teentaal-medium',
-    label: 'Teentaal - Medium',
-    subtitle: 'Steady khayal-friendly pulse at 84 BPM.',
-    taalId: 'teentaal',
-    loopId: 'standard',
-    tempo: 84,
-    tonic: 'C',
-  },
-  {
-    id: 'dadra-ghazal',
-    label: 'Dadra - Ghazal',
-    subtitle: 'Gentle six-beat ghazal support at 72 BPM.',
-    taalId: 'dadra',
-    loopId: 'ghazal',
-    tempo: 72,
-    tonic: 'D',
-  },
-  {
-    id: 'keharwa-fast',
-    label: 'Keharwa - Fast',
-    subtitle: 'Brisk eight-beat groove at 132 BPM.',
-    taalId: 'keharwa',
-    loopId: 'standard',
-    tempo: 132,
-    tonic: 'E',
-  },
-  {
-    id: 'addha-thumri',
-    label: 'Addha - Thumri',
-    subtitle: 'Lilted semi-classical support at 96 BPM.',
-    taalId: 'addha',
-    loopId: 'thumri',
-    tempo: 96,
-    tonic: 'G',
-  },
-  {
-    id: 'deepchandi-ghazal',
-    label: 'Deepchandi - Ghazal',
-    subtitle: 'Fourteen-beat ghazal flow at 68 BPM.',
-    taalId: 'deepchandi',
-    loopId: 'ghazal',
-    tempo: 68,
-    tonic: 'C',
-  },
-]

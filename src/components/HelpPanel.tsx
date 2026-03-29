@@ -2,7 +2,7 @@ import { SectionCard } from './SectionCard'
 
 export function HelpPanel() {
   return (
-    <SectionCard title="Guide" subtitle="Glossary and quick start">
+    <SectionCard title="Guide" subtitle="Glossary and usage">
       <details className="help-panel" open>
         <summary>How to use SurSaath</summary>
 

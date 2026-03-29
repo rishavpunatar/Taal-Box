@@ -5,7 +5,7 @@ SurSaath is a static React + TypeScript practice tool for Indian classical riyaa
 - a warm tanpura-style drone with selectable tonic
 - a playable taal box with sample-mapped tabla strokes, multiple taals, loop/style variants, and subtle cycle-end fills
 - live matra and vibhag tracking
-- tempo controls with silent tap-loop capture for user-played independent tabla phrases
+- tempo controls for steady practice pacing
 - local persistence for your last-used settings
 
 ## Stack
@@ -50,17 +50,16 @@ If GitHub Pages is not already configured for the repository, set:
 
 ## Project structure
 
-- `src/data/taals.ts`: taal definitions, loop/style variants, vibhag structure, and presets
+- `src/data/taals.ts`: taal definitions, loop/style variants, and vibhag structure
 - `src/lib/audioEngine.ts`: Tone.js scheduling, tanpura synthesis, and sample-mapped tabla playback
-- `src/lib/tapLoop.ts`: silent tap-loop capture, cycle inference, tabla-bol mapping, and preview formatting
 - `src/lib/transitionFills.ts`: light cycle-end fill patterns that keep repeated loops from feeling static
 - `src/lib/storage.ts`: local storage persistence
 - `src/components/`: UI building blocks
 - `public/audio/tabla-fs/`: named tabla-bol previews used by the taal engine
 
-## Editing taals and presets
+## Editing taals and loops
 
-Add or adjust taals, loop variants, and practice presets in `src/data/taals.ts`.
+Add or adjust taals and loop variants in `src/data/taals.ts`.
 
 Each taal can expose multiple loops through:
 
@@ -73,14 +72,6 @@ Each beat stores a display label plus one or more scheduled tabla strokes, so sw
 Audio-backed variants can also point at a bundled loop file in `public/audio/loops/`, with optional source BPM and loop start/end points. The current `Dadra -> Ghazal` variant uses a live loop recording and follows the app tempo by adjusting playback rate from its tagged source BPM.
 
 Cycle-end transition fills are kept in `src/lib/transitionFills.ts` so the steady loop data remains readable while the playback engine can still add occasional movement.
-
-The same file also contains the quick presets:
-
-- `Teentaal - Medium`
-- `Dadra - Ghazal`
-- `Keharwa - Fast`
-- `Addha - Thumri`
-- `Deepchandi - Ghazal`
 
 Current shipped taals:
 

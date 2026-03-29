@@ -1,5 +1,4 @@
 import {
-  startTransition,
   useEffect,
   useEffectEvent,
   useRef,
@@ -13,7 +12,6 @@ import { SliderField } from './components/SliderField'
 import {
   getDefaultLoop,
   getLoopById,
-  PRESETS,
   TAAL_BY_ID,
   TAALS,
 } from './data/taals'
@@ -21,20 +19,11 @@ import { SurSaathAudioEngine } from './lib/audioEngine'
 import { clampTempo, clampUnitLevel, MAX_TEMPO, MIN_TEMPO } from './lib/music'
 import { loadSettings, saveSettings } from './lib/storage'
 import {
-  finalizeTapLoop,
-  formatTapLoopPreview,
-  registerTapLoopTap,
-} from './lib/tapLoop'
-import {
   TONICS,
   type AppSettings,
   type CyclePosition,
   type PlaybackState,
-  type TapLoopCaptureState,
-  type TapLoopPattern,
 } from './types/music'
-
-const TAP_LOOP_IDLE_MS = 1400
 
 function App() {
   const [settings, setSettings] = useState<AppSettings>(loadSettings)
@@ -61,20 +50,8 @@ function App() {
     isKhali: initialEngineState.taal.khali.includes(1),
     isVibhagStart: true,
   }))
-  const [tapLoopState, setTapLoopState] = useState<TapLoopCaptureState>('idle')
-  const [tapLoopTapCount, setTapLoopTapCount] = useState(0)
-  const [tapLoopPattern, setTapLoopPattern] = useState<TapLoopPattern | null>(null)
 
   const audioEngineRef = useRef<SurSaathAudioEngine | null>(null)
-  const tapLoopHistoryRef = useRef<number[]>([])
-  const tapLoopFinalizeTimeoutRef = useRef<number | null>(null)
-
-  const clearTapLoopFinalizeTimeout = () => {
-    if (tapLoopFinalizeTimeoutRef.current !== null) {
-      window.clearTimeout(tapLoopFinalizeTimeoutRef.current)
-      tapLoopFinalizeTimeoutRef.current = null
-    }
-  }
 
   const updateSettings = (updater: (current: AppSettings) => AppSettings) => {
     setSettings((current) => updater(current))
@@ -83,38 +60,6 @@ function App() {
   const handleCyclePosition = useEffectEvent((position: CyclePosition) => {
     setCurrentPosition(position)
   })
-
-  const finalizeTapLoopCapture = (loopEndAt?: number) => {
-    clearTapLoopFinalizeTimeout()
-    const captureStartedAt = tapLoopHistoryRef.current[0]
-
-    const completedPattern = finalizeTapLoop({
-      taps: tapLoopHistoryRef.current,
-      fallbackTempo: settings.tempo,
-      captureDurationMs:
-        captureStartedAt !== undefined && loopEndAt !== undefined
-          ? loopEndAt - captureStartedAt
-          : undefined,
-    })
-
-    tapLoopHistoryRef.current = []
-
-    if (!completedPattern) {
-      setTapLoopState('idle')
-      setTapLoopTapCount(0)
-      setTapLoopPattern(null)
-      return
-    }
-
-    setTapLoopPattern(completedPattern)
-    setTapLoopTapCount(completedPattern.tapCount)
-    setTapLoopState('ready')
-
-    updateSettings((current) => ({
-      ...current,
-      tempo: completedPattern.bpm,
-    }))
-  }
 
   useEffect(() => {
     const engine = new SurSaathAudioEngine(
@@ -136,10 +81,6 @@ function App() {
   }, [settings])
 
   useEffect(() => {
-    audioEngineRef.current?.setTapLoop(tapLoopPattern)
-  }, [tapLoopPattern])
-
-  useEffect(() => {
     audioEngineRef.current?.setTaal(selectedTaal, selectedLoop)
   }, [selectedLoop, selectedTaal])
 
@@ -158,31 +99,6 @@ function App() {
   useEffect(() => {
     audioEngineRef.current?.setPercussionVolume(settings.percussionVolume)
   }, [settings.percussionVolume])
-
-  useEffect(() => {
-    return () => {
-      clearTapLoopFinalizeTimeout()
-    }
-  }, [])
-
-  const cancelPendingTapLoopCapture = () => {
-    if (tapLoopState !== 'capturing') {
-      return
-    }
-
-    clearTapLoopFinalizeTimeout()
-    tapLoopHistoryRef.current = []
-    setTapLoopTapCount(tapLoopPattern?.tapCount ?? 0)
-    setTapLoopState(tapLoopPattern ? 'ready' : 'idle')
-  }
-
-  const clearTapLoopOverlay = () => {
-    clearTapLoopFinalizeTimeout()
-    tapLoopHistoryRef.current = []
-    setTapLoopPattern(null)
-    setTapLoopTapCount(0)
-    setTapLoopState('idle')
-  }
 
   const resetPositionView = () => {
     setCurrentPosition({
@@ -219,83 +135,17 @@ function App() {
     audioEngineRef.current?.stop()
     resetPositionView()
     setPlaybackState('stopped')
-    cancelPendingTapLoopCapture()
   }
 
   const handleReset = () => {
     audioEngineRef.current?.reset()
     resetPositionView()
-    cancelPendingTapLoopCapture()
-  }
-
-  const handleTapLoopTap = () => {
-    const now = performance.now()
-    const isNewCapture = tapLoopState !== 'capturing'
-
-    if (isNewCapture) {
-      setTapLoopPattern(null)
-      setTapLoopState('capturing')
-      setTapLoopTapCount(0)
-      tapLoopHistoryRef.current = []
-    }
-
-    tapLoopHistoryRef.current = registerTapLoopTap(tapLoopHistoryRef.current, now)
-    setTapLoopTapCount(tapLoopHistoryRef.current.length)
-    clearTapLoopFinalizeTimeout()
-    tapLoopFinalizeTimeoutRef.current = window.setTimeout(() => {
-      finalizeTapLoopCapture()
-    }, TAP_LOOP_IDLE_MS)
-  }
-
-  const handleFinishTapLoop = () => {
-    if (tapLoopState !== 'capturing') {
-      return
-    }
-
-    finalizeTapLoopCapture(performance.now())
-  }
-
-  const handleClearTapLoop = () => {
-    clearTapLoopOverlay()
-  }
-
-  const applyPreset = (presetId: string) => {
-    const preset = PRESETS.find((item) => item.id === presetId)
-
-    if (!preset) {
-      return
-    }
-
-    startTransition(() => {
-      const presetTaal = TAAL_BY_ID[preset.taalId]
-
-      updateSettings((current) => ({
-        ...current,
-        taalId: preset.taalId,
-        loopId: preset.loopId ?? getDefaultLoop(presetTaal).id,
-        tempo: preset.tempo,
-        tonic: preset.tonic ?? current.tonic,
-      }))
-    })
   }
 
   const currentBol = currentPosition.beat.label
   const thekaPreview = selectedLoop.beats.map((beat) => beat.label).join(' · ')
   const khaliLabel =
     selectedTaal.khali.length > 0 ? selectedTaal.khali.join(', ') : 'None'
-  const tapLoopPreview = tapLoopPattern ? formatTapLoopPreview(tapLoopPattern) : ''
-  const tapLoopSummary =
-    tapLoopState === 'capturing'
-      ? `${tapLoopTapCount} ${tapLoopTapCount === 1 ? 'tap' : 'taps'} captured silently. Pause briefly or press Finish to infer a loop.`
-      : tapLoopPattern
-        ? `${tapLoopPattern.tapCount} hits inferred as an independent ${tapLoopPattern.beatCount}-beat tabla loop at ${tapLoopPattern.bpm} BPM.${tapLoopPattern.observedCycles > 1 ? ` Collapsed from ${tapLoopPattern.observedCycles} captured cycles.` : ''}`
-        : 'Tap any phrase in silence. SurSaath will infer its own repeating tabla loop, choose bols for the taps, and set the pace from what you played.'
-  const tapLoopLabel =
-    tapLoopState === 'capturing'
-      ? 'Capturing'
-      : tapLoopPattern
-        ? 'Loop Ready'
-        : 'Idle'
 
   return (
     <div className="app-shell">
@@ -305,8 +155,7 @@ function App() {
           <h1>Tanpura and taal support for focused riyaaz.</h1>
           <p className="hero-panel__lead">
             Static, browser-based practice support with a warm tanpura layer,
-            usable taal playback, independent tap-loop capture, and live cycle
-            tracking.
+            usable taal playback, and live cycle tracking.
           </p>
         </div>
 
@@ -370,22 +219,13 @@ function App() {
                   Stop
                 </button>
                 <button onClick={handleReset}>Reset</button>
-                <button
-                  onClick={handleClearTapLoop}
-                  disabled={!tapLoopPattern && tapLoopState !== 'capturing'}
-                >
-                  Clear tap loop
-                </button>
               </div>
 
               <div className="tempo-panel">
                 <div className="tempo-panel__display">
                   <span>Current BPM</span>
                   <strong>{settings.tempo}</strong>
-                  <small>
-                    Tempo slider stays available, but an inferred tap loop can
-                    set the pace from the phrase you play.
-                  </small>
+                  <small>Adjust tempo live during playback.</small>
                 </div>
                 <SliderField
                   id="tempo"
@@ -401,48 +241,6 @@ function App() {
                     }))
                   }
                 />
-
-                <div className="tap-loop-panel">
-                  <div className="tap-loop-panel__header">
-                    <strong>Tap Loop</strong>
-                    <span data-state={tapLoopState}>{tapLoopLabel}</span>
-                  </div>
-                  <p className="tap-loop-panel__summary">{tapLoopSummary}</p>
-
-                  <div className="tap-loop-panel__buttons">
-                    <button
-                      className={[
-                        'transport-button',
-                        'transport-button--tap',
-                        tapLoopState === 'capturing'
-                          ? 'transport-button--armed'
-                          : '',
-                      ]
-                        .filter(Boolean)
-                        .join(' ')}
-                      onClick={handleTapLoopTap}
-                    >
-                      {tapLoopState === 'capturing'
-                        ? 'Tap Phrase'
-                        : tapLoopPattern
-                          ? 'Re-record Loop'
-                          : 'Tap Loop'}
-                    </button>
-                    <button
-                      onClick={handleFinishTapLoop}
-                      disabled={tapLoopState !== 'capturing'}
-                    >
-                      Finish
-                    </button>
-                  </div>
-
-                  {tapLoopPattern ? (
-                    <div className="tap-loop-preview">
-                      Inferred cycle: {tapLoopPattern.vibhags.join(' + ')}.
-                      {' '}Bols: {tapLoopPreview}
-                    </div>
-                  ) : null}
-                </div>
               </div>
             </div>
           </SectionCard>
@@ -569,21 +367,6 @@ function App() {
         </div>
 
         <div className="app-grid__secondary">
-          <SectionCard title="Presets" subtitle="Quick starting points">
-            <div className="preset-list">
-              {PRESETS.map((preset) => (
-                <button
-                  key={preset.id}
-                  className="preset-button"
-                  onClick={() => applyPreset(preset.id)}
-                >
-                  <strong>{preset.label}</strong>
-                  <span>{preset.subtitle}</span>
-                </button>
-              ))}
-            </div>
-          </SectionCard>
-
           <HelpPanel />
         </div>
       </main>

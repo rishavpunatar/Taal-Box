@@ -73,31 +73,6 @@ export interface TaalDefinition {
   loops: TaalLoopVariant[]
 }
 
-export interface PracticePreset {
-  id: string
-  label: string
-  subtitle: string
-  taalId: string
-  loopId?: string
-  tempo: number
-  tonic?: Tonic
-}
-
-export interface TapLoopHit {
-  offsetBeats: number
-  velocity: number
-  bol: Bol
-}
-
-export interface TapLoopPattern {
-  beatCount: number
-  vibhags: number[]
-  bpm: number
-  tapCount: number
-  observedCycles: number
-  hits: TapLoopHit[]
-}
-
 export interface AppSettings {
   taalId: string
   loopId: string
@@ -117,4 +92,3 @@ export interface CyclePosition {
 }
 
 export type PlaybackState = 'stopped' | 'playing' | 'paused'
-export type TapLoopCaptureState = 'idle' | 'capturing' | 'ready'
