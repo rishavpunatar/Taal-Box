@@ -10,12 +10,18 @@ import type {
   Tonic,
 } from '../types/music'
 import { TAALS } from '../data/taals'
-import { getPerfectFifth, getVibhagStarts } from './music'
+import {
+  getClosestTonicInterval,
+  getPerfectFifth,
+  getVibhagStarts,
+} from './music'
 import { getTransitionFill } from './transitionFills'
 
 const TANPURA_STROKE_OFFSETS = [0, 1.18, 2.36, 3.56] as const
 const TANPURA_CYCLE_SECONDS = 4.78
 const TABLA_SAMPLE_BASE_URL = `${import.meta.env.BASE_URL}audio/tabla-fs/`
+const LIVE_LOOP_GRAIN_SIZE = 0.11
+const LIVE_LOOP_GRAIN_OVERLAP = 0.045
 const TABLA_SAMPLE_NOTES = {
   dha: 'C3',
   dhin: 'D3',
@@ -38,6 +44,12 @@ function levelToDb(level: number) {
 function getPlaybackRate(bpm: number, sourceBpm: number) {
   return bpm / Math.max(sourceBpm, 1)
 }
+
+function shouldPreserveLoopPitch(audioLoop: TaalLoopAudio) {
+  return audioLoop.preservePitch ?? Boolean(audioLoop.sourceTonic)
+}
+
+type LoopPlayer = Tone.Player | Tone.GrainPlayer
 
 export class SurSaathAudioEngine {
   private currentTaal: TaalDefinition
@@ -68,8 +80,8 @@ export class SurSaathAudioEngine {
   private noise!: Tone.NoiseSynth
   private tablaSampler!: Tone.Sampler
   private tablaSamplerLoaded = false
-  private loopPlayers = new Map<string, Tone.Player>()
-  private activeLoopPlayer: Tone.Player | null = null
+  private loopPlayers = new Map<string, LoopPlayer>()
+  private activeLoopPlayer: LoopPlayer | null = null
 
   private matraEventId?: number
   private tanpuraEventId?: number
@@ -339,6 +351,7 @@ export class SurSaathAudioEngine {
 
   setTonic(tonic: Tonic) {
     this.currentTonic = tonic
+    this.updateActiveLoopPitch()
   }
 
   setTaal(taal: TaalDefinition, loop: TaalLoopVariant) {
@@ -428,7 +441,20 @@ export class SurSaathAudioEngine {
   }
 
   private async createLoopPlayer(audioLoop: TaalLoopAudio) {
-    return new Promise<Tone.Player>((resolve) => {
+    return new Promise<LoopPlayer>((resolve) => {
+      if (shouldPreserveLoopPitch(audioLoop)) {
+        const player = new Tone.GrainPlayer({
+          url: this.getLoopAudioUrl(audioLoop),
+          loop: audioLoop.loop ?? true,
+          grainSize: LIVE_LOOP_GRAIN_SIZE,
+          overlap: LIVE_LOOP_GRAIN_OVERLAP,
+          onload: () => resolve(player),
+          onerror: () => resolve(player),
+        }).connect(this.percussionBus)
+
+        return
+      }
+
       const player = new Tone.Player({
         url: this.getLoopAudioUrl(audioLoop),
         loop: audioLoop.loop ?? true,
@@ -478,11 +504,37 @@ export class SurSaathAudioEngine {
       return
     }
 
-    this.activeLoopPlayer.playbackRate =
-      bpm / Math.max(this.currentLoop.audioLoop.sourceBpm, 1)
+    this.activeLoopPlayer.playbackRate = getPlaybackRate(
+      bpm,
+      this.currentLoop.audioLoop.sourceBpm,
+    )
   }
 
-  private activateLoopPlayer(player: Tone.Player, audioLoop: TaalLoopAudio) {
+  private getLoopDetune(audioLoop: TaalLoopAudio) {
+    if (!audioLoop.sourceTonic) {
+      return 0
+    }
+
+    return getClosestTonicInterval(audioLoop.sourceTonic, this.currentTonic) * 100
+  }
+
+  private applyLoopPitch(player: LoopPlayer, audioLoop: TaalLoopAudio) {
+    if (!(player instanceof Tone.GrainPlayer)) {
+      return
+    }
+
+    player.detune = this.getLoopDetune(audioLoop)
+  }
+
+  private updateActiveLoopPitch() {
+    if (!this.activeLoopPlayer || !this.currentLoop.audioLoop) {
+      return
+    }
+
+    this.applyLoopPitch(this.activeLoopPlayer, this.currentLoop.audioLoop)
+  }
+
+  private activateLoopPlayer(player: LoopPlayer, audioLoop: TaalLoopAudio) {
     if (this.activeLoopPlayer && this.activeLoopPlayer !== player) {
       this.deactivateLoopPlayer()
     }
@@ -493,6 +545,7 @@ export class SurSaathAudioEngine {
     player.loopStart = audioLoop.loopStartSeconds ?? 0
     player.loopEnd = audioLoop.loopEndSeconds ?? player.buffer.duration
     player.playbackRate = getPlaybackRate(Tone.Transport.bpm.value, audioLoop.sourceBpm)
+    this.applyLoopPitch(player, audioLoop)
     player.sync().start(0, audioLoop.loopStartSeconds ?? 0)
     this.activeLoopPlayer = player
   }

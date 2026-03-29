@@ -45,6 +45,8 @@ export interface TaalBeat {
 export interface TaalLoopAudio {
   url: string
   sourceBpm: number
+  sourceTonic?: Tonic
+  preservePitch?: boolean
   mode?: 'replace' | 'layer'
   loop?: boolean
   loopStartSeconds?: number

@@ -253,6 +253,8 @@ export const TAALS: TaalDefinition[] = [
         {
           url: 'audio/loops/dadra-ghazal-live.mp3',
           sourceBpm: 120,
+          sourceTonic: 'D',
+          preservePitch: true,
           mode: 'replace',
           loop: true,
           loopStartSeconds: 3.77,

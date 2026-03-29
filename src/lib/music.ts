@@ -31,6 +31,18 @@ export function getPerfectFifth(tonic: Tonic) {
   return TONIC_ORDER[(index + 7) % TONIC_ORDER.length]
 }
 
+export function getClosestTonicInterval(from: Tonic, to: Tonic) {
+  let interval = TONIC_ORDER.indexOf(to) - TONIC_ORDER.indexOf(from)
+
+  if (interval > 6) {
+    interval -= 12
+  } else if (interval < -6) {
+    interval += 12
+  }
+
+  return interval
+}
+
 export function getVibhagStarts(taal: Pick<TaalDefinition, 'vibhags'>) {
   const starts: number[] = []
   let cursor = 1
