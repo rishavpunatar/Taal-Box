@@ -5,12 +5,14 @@ import type {
   TaalBeat,
   TaalDefinition,
   TaalLoopVariant,
+  TaalStroke,
   Tonic,
 } from '../types/music'
 import { getPerfectFifth, getVibhagStarts } from './music'
+import { getTransitionFill } from './transitionFills'
 
-const TANPURA_STROKE_OFFSETS = [0, 0.78, 1.56, 2.34] as const
-const TANPURA_CYCLE_SECONDS = 3.12
+const TANPURA_STROKE_OFFSETS = [0, 1.18, 2.36, 3.56] as const
+const TANPURA_CYCLE_SECONDS = 4.78
 const TABLA_SAMPLE_BASE_URL = `${import.meta.env.BASE_URL}audio/tabla/`
 const TABLA_SAMPLE_NOTES = {
   bass: 'C3',
@@ -37,7 +39,7 @@ export class SurSaathAudioEngine {
   private tanpuraChorus!: Tone.Chorus
   private tanpuraReverb!: Tone.Reverb
   private tanpuraVolume!: Tone.Volume
-  private tanpuraPluck!: Tone.PluckSynth
+  private tanpuraBody!: Tone.PolySynth<Tone.Synth>
   private tanpuraShimmer!: Tone.PolySynth<Tone.Synth>
 
   private percussionBus!: Tone.Gain
@@ -76,16 +78,16 @@ export class SurSaathAudioEngine {
     Tone.getContext().lookAhead = 0.12
 
     this.tanpuraBus = new Tone.Gain(0.95)
-    this.tanpuraFilter = new Tone.Filter(2400, 'lowpass')
+    this.tanpuraFilter = new Tone.Filter(1900, 'lowpass')
     this.tanpuraChorus = new Tone.Chorus({
-      frequency: 0.18,
-      delayTime: 3.5,
-      depth: 0.25,
-      wet: 0.16,
+      frequency: 0.12,
+      delayTime: 4.2,
+      depth: 0.18,
+      wet: 0.1,
     }).start()
     this.tanpuraReverb = new Tone.Reverb({
-      decay: 7.5,
-      wet: 0.28,
+      decay: 9.4,
+      wet: 0.34,
       preDelay: 0.02,
     })
     this.tanpuraVolume = new Tone.Volume(-8)
@@ -96,22 +98,29 @@ export class SurSaathAudioEngine {
       this.tanpuraVolume,
       Tone.Destination,
     )
-    this.tanpuraPluck = new Tone.PluckSynth({
-      attackNoise: 1.2,
-      dampening: 3400,
-      resonance: 0.92,
+    this.tanpuraBody = new Tone.PolySynth(Tone.Synth, {
+      oscillator: {
+        type: 'sine4',
+      },
+      envelope: {
+        attack: 0.07,
+        decay: 1.1,
+        sustain: 0.62,
+        release: 5.4,
+      },
+      volume: -11,
     }).connect(this.tanpuraBus)
     this.tanpuraShimmer = new Tone.PolySynth(Tone.Synth, {
       oscillator: {
         type: 'triangle4',
       },
       envelope: {
-        attack: 0.03,
-        decay: 0.7,
-        sustain: 0.22,
-        release: 2.6,
+        attack: 0.11,
+        decay: 1.6,
+        sustain: 0.28,
+        release: 6.2,
       },
-      volume: -14,
+      volume: -18,
     }).connect(this.tanpuraBus)
 
     this.percussionBus = new Tone.Gain(1)
@@ -323,7 +332,7 @@ export class SurSaathAudioEngine {
       Tone.Transport.stop()
       Tone.Transport.position = '0:0:0'
       this.silenceVoices()
-      this.tanpuraPluck.dispose()
+      this.tanpuraBody.dispose()
       this.tanpuraShimmer.dispose()
       this.tanpuraBus.dispose()
       this.tanpuraFilter.dispose()
@@ -369,6 +378,7 @@ export class SurSaathAudioEngine {
       return
     }
 
+    this.tanpuraBody.releaseAll()
     this.tanpuraShimmer.releaseAll()
   }
 
@@ -379,12 +389,20 @@ export class SurSaathAudioEngine {
     const isSam = matra === this.currentTaal.sam
     const isKhali = this.currentTaal.khali.includes(matra)
     const isVibhagStart = vibhagStarts.includes(matra)
+    const transitionFill =
+      this.currentStepIndex === this.currentLoop.beats.length - 1
+        ? getTransitionFill(
+            this.currentTaal.id,
+            this.currentLoop.id,
+            this.currentCycle,
+          )
+        : []
 
     this.triggerBeat(beat, time, {
       isSam,
       isKhali,
       isVibhagStart,
-    })
+    }, transitionFill)
 
     Tone.Draw.schedule(() => {
       this.onCyclePosition?.({
@@ -414,12 +432,16 @@ export class SurSaathAudioEngine {
       isKhali: boolean
       isVibhagStart: boolean
     },
+    extraStrokes: TaalStroke[] = [],
   ) {
     const matraSeconds = Tone.Time('4n').toSeconds()
+    const scheduledStrokes = [...beat.strokes, ...extraStrokes]
 
-    beat.strokes.forEach((stroke, index) => {
+    scheduledStrokes.forEach((stroke, index) => {
       const defaultOffset =
-        beat.strokes.length > 1 ? index / beat.strokes.length : 0
+        index < beat.strokes.length && beat.strokes.length > 1
+          ? index / beat.strokes.length
+          : 0
       const velocityScale = stroke.velocity ?? (index === 0 ? 1 : 0.74)
 
       this.triggerBol(
@@ -435,34 +457,39 @@ export class SurSaathAudioEngine {
     const fifth = getPerfectFifth(this.currentTonic)
     const strokes = [
       {
-        pluck: `${fifth}2`,
+        body: `${fifth}2`,
         shimmer: [`${fifth}3`, `${this.currentTonic}3`],
-        velocity: 0.56,
+        velocity: 0.28,
       },
       {
-        pluck: `${this.currentTonic}3`,
+        body: `${this.currentTonic}3`,
         shimmer: [`${this.currentTonic}3`, `${this.currentTonic}4`],
-        velocity: 0.63,
+        velocity: 0.35,
       },
       {
-        pluck: `${this.currentTonic}4`,
+        body: `${this.currentTonic}3`,
         shimmer: [`${this.currentTonic}4`, `${fifth}4`],
-        velocity: 0.58,
+        velocity: 0.32,
       },
       {
-        pluck: `${this.currentTonic}4`,
+        body: `${this.currentTonic}3`,
         shimmer: [`${this.currentTonic}4`, `${this.currentTonic}5`],
-        velocity: 0.6,
+        velocity: 0.34,
       },
     ] as const
 
     TANPURA_STROKE_OFFSETS.forEach((offset, index) => {
       const stroke = strokes[index]
       const strokeTime = time + offset
-      this.tanpuraPluck.triggerAttack(stroke.pluck, strokeTime)
+      this.tanpuraBody.triggerAttackRelease(
+        stroke.body,
+        5.4,
+        strokeTime,
+        stroke.velocity,
+      )
       this.tanpuraShimmer.triggerAttackRelease(
         [...stroke.shimmer],
-        2.8,
+        6.2,
         strokeTime,
         stroke.velocity,
       )

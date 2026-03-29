@@ -3,7 +3,7 @@
 SurSaath is a static React + TypeScript practice tool for Indian classical riyaaz. It runs fully in the browser and combines:
 
 - a warm tanpura-style drone with selectable tonic
-- a playable taal box with sample-mapped tabla strokes, multiple taals, and loop/style variants
+- a playable taal box with sample-mapped tabla strokes, multiple taals, loop/style variants, and subtle cycle-end fills
 - live matra and vibhag tracking
 - tempo controls with tap tempo
 - local persistence for your last-used settings
@@ -52,6 +52,7 @@ If GitHub Pages is not already configured for the repository, set:
 
 - `src/data/taals.ts`: taal definitions, loop/style variants, vibhag structure, and presets
 - `src/lib/audioEngine.ts`: Tone.js scheduling, tanpura synthesis, and sample-mapped tabla playback
+- `src/lib/transitionFills.ts`: light cycle-end fill patterns that keep repeated loops from feeling static
 - `src/lib/storage.ts`: local storage persistence
 - `src/components/`: UI building blocks
 - `public/audio/tabla/`: derived tabla one-shots used by the taal engine
@@ -67,6 +68,8 @@ Each taal can expose multiple loops through:
 - `loop.id`, `loop.label`, `loop.summary`, and `loop.beats`
 
 Each beat stores a display label plus one or more scheduled tabla strokes, so swung addha, sitarkhani, tilwada, or ghazal-style loops can be represented without flattening everything to one bol per matra.
+
+Cycle-end transition fills are kept in `src/lib/transitionFills.ts` so the steady loop data remains readable while the playback engine can still add occasional movement.
 
 The same file also contains the quick presets:
 
@@ -116,6 +119,7 @@ The tabla one-shots in `public/audio/tabla/` are derived from the Wikimedia Comm
 ## Good next improvements
 
 - add per-loop swing and subdivision controls
+- add user-selectable fill density or a "steady / active" accompaniment mode
 - add pitch reference for male/female tonic ranges
 - add sample-based tabla and tanpura sound sets
 - add lehra or tanpura fine-tuning options
