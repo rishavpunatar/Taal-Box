@@ -5,6 +5,7 @@ import type {
   TaalBeat,
   TaalDefinition,
   TaalLoopVariant,
+  TapLoopPattern,
   TaalStroke,
   Tonic,
 } from '../types/music'
@@ -54,6 +55,7 @@ export class SurSaathAudioEngine {
   private noise!: Tone.NoiseSynth
   private tablaSampler!: Tone.Sampler
   private tablaSamplerLoaded = false
+  private tapLoop: TapLoopPattern | null = null
 
   private matraEventId?: number
   private tanpuraEventId?: number
@@ -319,6 +321,15 @@ export class SurSaathAudioEngine {
     this.emitIdlePosition()
   }
 
+  setTapLoop(tapLoop: TapLoopPattern | null) {
+    this.tapLoop = tapLoop
+  }
+
+  async previewTapLoopHit() {
+    await this.ensureReady()
+    this.triggerTapLoopHit(Tone.now() + 0.01, 0.82)
+  }
+
   dispose() {
     if (this.matraEventId !== undefined) {
       Tone.Transport.clear(this.matraEventId)
@@ -403,6 +414,7 @@ export class SurSaathAudioEngine {
       isKhali,
       isVibhagStart,
     }, transitionFill)
+    this.triggerTapLoopWindow(time)
 
     Tone.Draw.schedule(() => {
       this.onCyclePosition?.({
@@ -494,6 +506,47 @@ export class SurSaathAudioEngine {
         stroke.velocity,
       )
     })
+  }
+
+  private triggerTapLoopWindow(time: number) {
+    if (!this.tapLoop || this.tapLoop.beatCount !== this.currentLoop.beats.length) {
+      return
+    }
+
+    const beatStart = this.currentStepIndex
+    const beatEnd = beatStart + 1
+    const matraSeconds = Tone.Time('4n').toSeconds()
+
+    this.tapLoop.hits.forEach((hit, index) => {
+      if (hit.offsetBeats < beatStart || hit.offsetBeats >= beatEnd) {
+        return
+      }
+
+      const hitTime = time + (hit.offsetBeats - beatStart) * matraSeconds
+      const velocity = hit.velocity * (index === 0 ? 0.96 : 0.78)
+      this.triggerTapLoopHit(hitTime, velocity)
+    })
+  }
+
+  private triggerTapLoopHit(time: number, velocity: number) {
+    if (this.tablaSamplerLoaded) {
+      this.playTablaSample(
+        TABLA_SAMPLE_NOTES.muted,
+        '64n',
+        time,
+        velocity * 0.78,
+      )
+      this.playTablaSample(
+        TABLA_SAMPLE_NOTES.bright,
+        '64n',
+        time + 0.012,
+        velocity * 0.4,
+      )
+      return
+    }
+
+    this.metallic.triggerAttackRelease('64n', time, velocity * 0.44)
+    this.noise.triggerAttackRelease('64n', time, velocity * 0.32)
   }
 
   private triggerBol(

@@ -5,7 +5,7 @@ SurSaath is a static React + TypeScript practice tool for Indian classical riyaa
 - a warm tanpura-style drone with selectable tonic
 - a playable taal box with sample-mapped tabla strokes, multiple taals, loop/style variants, and subtle cycle-end fills
 - live matra and vibhag tracking
-- tempo controls with tap tempo
+- tempo controls with tap-loop capture for user-played overlay patterns
 - local persistence for your last-used settings
 
 ## Stack
@@ -52,6 +52,7 @@ If GitHub Pages is not already configured for the repository, set:
 
 - `src/data/taals.ts`: taal definitions, loop/style variants, vibhag structure, and presets
 - `src/lib/audioEngine.ts`: Tone.js scheduling, tanpura synthesis, and sample-mapped tabla playback
+- `src/lib/tapLoop.ts`: tap-loop capture, inference, and overlay pattern formatting
 - `src/lib/transitionFills.ts`: light cycle-end fill patterns that keep repeated loops from feeling static
 - `src/lib/storage.ts`: local storage persistence
 - `src/components/`: UI building blocks

@@ -20,13 +20,21 @@ import {
 import { SurSaathAudioEngine } from './lib/audioEngine'
 import { clampTempo, clampUnitLevel, MAX_TEMPO, MIN_TEMPO } from './lib/music'
 import { loadSettings, saveSettings } from './lib/storage'
-import { registerTap } from './lib/tapTempo'
+import {
+  finalizeTapLoop,
+  formatTapLoopPreview,
+  registerTapLoopTap,
+} from './lib/tapLoop'
 import {
   TONICS,
   type AppSettings,
   type CyclePosition,
   type PlaybackState,
+  type TapLoopCaptureState,
+  type TapLoopPattern,
 } from './types/music'
+
+const TAP_LOOP_IDLE_MS = 1400
 
 function App() {
   const [settings, setSettings] = useState<AppSettings>(loadSettings)
@@ -53,14 +61,59 @@ function App() {
     isKhali: initialEngineState.taal.khali.includes(1),
     isVibhagStart: true,
   }))
-  const [tapCount, setTapCount] = useState(0)
+  const [tapLoopState, setTapLoopState] = useState<TapLoopCaptureState>('idle')
+  const [tapLoopTapCount, setTapLoopTapCount] = useState(0)
+  const [tapLoopPattern, setTapLoopPattern] = useState<TapLoopPattern | null>(null)
 
   const audioEngineRef = useRef<SurSaathAudioEngine | null>(null)
-  const tapHistoryRef = useRef<number[]>([])
+  const tapLoopHistoryRef = useRef<number[]>([])
+  const tapLoopFinalizeTimeoutRef = useRef<number | null>(null)
+
+  const clearTapLoopFinalizeTimeout = () => {
+    if (tapLoopFinalizeTimeoutRef.current !== null) {
+      window.clearTimeout(tapLoopFinalizeTimeoutRef.current)
+      tapLoopFinalizeTimeoutRef.current = null
+    }
+  }
+
+  const updateSettings = (updater: (current: AppSettings) => AppSettings) => {
+    setSettings((current) => updater(current))
+  }
 
   const handleCyclePosition = useEffectEvent((position: CyclePosition) => {
     setCurrentPosition(position)
   })
+
+  const finalizeTapLoopCapture = (loopEndAt?: number) => {
+    clearTapLoopFinalizeTimeout()
+
+    const completedPattern = finalizeTapLoop({
+      taps: tapLoopHistoryRef.current,
+      beatCount: selectedLoop.beats.length,
+      fallbackTempo: settings.tempo,
+      sourceTaalId: selectedTaal.id,
+      sourceLoopId: selectedLoop.id,
+      loopEndAt,
+    })
+
+    tapLoopHistoryRef.current = []
+
+    if (!completedPattern) {
+      setTapLoopState('idle')
+      setTapLoopTapCount(0)
+      setTapLoopPattern(null)
+      return
+    }
+
+    setTapLoopPattern(completedPattern)
+    setTapLoopTapCount(completedPattern.tapCount)
+    setTapLoopState('ready')
+
+    updateSettings((current) => ({
+      ...current,
+      tempo: completedPattern.bpm,
+    }))
+  }
 
   useEffect(() => {
     const engine = new SurSaathAudioEngine(
@@ -82,6 +135,10 @@ function App() {
   }, [settings])
 
   useEffect(() => {
+    audioEngineRef.current?.setTapLoop(tapLoopPattern)
+  }, [tapLoopPattern])
+
+  useEffect(() => {
     audioEngineRef.current?.setTaal(selectedTaal, selectedLoop)
   }, [selectedLoop, selectedTaal])
 
@@ -101,8 +158,29 @@ function App() {
     audioEngineRef.current?.setPercussionVolume(settings.percussionVolume)
   }, [settings.percussionVolume])
 
-  const updateSettings = (updater: (current: AppSettings) => AppSettings) => {
-    setSettings((current) => updater(current))
+  useEffect(() => {
+    return () => {
+      clearTapLoopFinalizeTimeout()
+    }
+  }, [])
+
+  const cancelPendingTapLoopCapture = () => {
+    if (tapLoopState !== 'capturing') {
+      return
+    }
+
+    clearTapLoopFinalizeTimeout()
+    tapLoopHistoryRef.current = []
+    setTapLoopTapCount(tapLoopPattern?.tapCount ?? 0)
+    setTapLoopState(tapLoopPattern ? 'ready' : 'idle')
+  }
+
+  const clearTapLoopOverlay = () => {
+    clearTapLoopFinalizeTimeout()
+    tapLoopHistoryRef.current = []
+    setTapLoopPattern(null)
+    setTapLoopTapCount(0)
+    setTapLoopState('idle')
   }
 
   const resetPositionView = () => {
@@ -140,28 +218,49 @@ function App() {
     audioEngineRef.current?.stop()
     resetPositionView()
     setPlaybackState('stopped')
-    tapHistoryRef.current = []
-    setTapCount(0)
+    cancelPendingTapLoopCapture()
   }
 
   const handleReset = () => {
     audioEngineRef.current?.reset()
     resetPositionView()
-    tapHistoryRef.current = []
-    setTapCount(0)
+    cancelPendingTapLoopCapture()
   }
 
-  const handleTapTempo = () => {
-    const result = registerTap(tapHistoryRef.current, performance.now())
-    tapHistoryRef.current = result.taps
-    setTapCount(result.taps.length)
+  const handleTapLoopTap = async () => {
+    const now = performance.now()
+    const isNewCapture = tapLoopState !== 'capturing'
 
-    if (result.tempo) {
-      updateSettings((current) => ({
-        ...current,
-        tempo: result.tempo ?? current.tempo,
-      }))
+    if (isNewCapture) {
+      setTapLoopPattern(null)
+      setTapLoopState('capturing')
+      setTapLoopTapCount(0)
+      tapLoopHistoryRef.current = []
     }
+
+    tapLoopHistoryRef.current = registerTapLoopTap(tapLoopHistoryRef.current, now)
+    setTapLoopTapCount(tapLoopHistoryRef.current.length)
+    clearTapLoopFinalizeTimeout()
+    tapLoopFinalizeTimeoutRef.current = window.setTimeout(() => {
+      finalizeTapLoopCapture()
+    }, TAP_LOOP_IDLE_MS)
+
+    if (audioEngineRef.current) {
+      await audioEngineRef.current.previewTapLoopHit()
+      setAudioReady(true)
+    }
+  }
+
+  const handleFinishTapLoop = () => {
+    if (tapLoopState !== 'capturing') {
+      return
+    }
+
+    finalizeTapLoopCapture(performance.now())
+  }
+
+  const handleClearTapLoop = () => {
+    clearTapLoopOverlay()
   }
 
   const applyPreset = (presetId: string) => {
@@ -173,6 +272,7 @@ function App() {
 
     startTransition(() => {
       const presetTaal = TAAL_BY_ID[preset.taalId]
+      clearTapLoopOverlay()
 
       updateSettings((current) => ({
         ...current,
@@ -188,6 +288,19 @@ function App() {
   const thekaPreview = selectedLoop.beats.map((beat) => beat.label).join(' · ')
   const khaliLabel =
     selectedTaal.khali.length > 0 ? selectedTaal.khali.join(', ') : 'None'
+  const tapLoopPreview = tapLoopPattern ? formatTapLoopPreview(tapLoopPattern) : ''
+  const tapLoopSummary =
+    tapLoopState === 'capturing'
+      ? `${tapLoopTapCount} ${tapLoopTapCount === 1 ? 'tap' : 'taps'} captured. Pause briefly or press Finish to lock the phrase.`
+      : tapLoopPattern
+        ? `${tapLoopPattern.tapCount} hits repeating across ${tapLoopPattern.beatCount} matras at ${tapLoopPattern.bpm} BPM.`
+        : 'Tap the phrase you want to double over the current cycle. A short pause turns it into a repeating overlay.'
+  const tapLoopLabel =
+    tapLoopState === 'capturing'
+      ? 'Capturing'
+      : tapLoopPattern
+        ? 'Loop Ready'
+        : 'Idle'
 
   return (
     <div className="app-shell">
@@ -197,7 +310,7 @@ function App() {
           <h1>Tanpura and taal support for focused riyaaz.</h1>
           <p className="hero-panel__lead">
             Static, browser-based practice support with a warm tanpura layer,
-            usable taal playback, tap tempo, and live cycle tracking.
+            usable taal playback, tap-loop capture, and live cycle tracking.
           </p>
         </div>
 
@@ -262,10 +375,10 @@ function App() {
                 </button>
                 <button onClick={handleReset}>Reset</button>
                 <button
-                  className="transport-button transport-button--tap"
-                  onClick={handleTapTempo}
+                  onClick={handleClearTapLoop}
+                  disabled={!tapLoopPattern && tapLoopState !== 'capturing'}
                 >
-                  Tap tempo
+                  Clear tap loop
                 </button>
               </div>
 
@@ -274,9 +387,8 @@ function App() {
                   <span>Current BPM</span>
                   <strong>{settings.tempo}</strong>
                   <small>
-                    {tapCount > 1
-                      ? `${tapCount} taps captured`
-                      : 'Tap 2 or more times to calculate tempo'}
+                    Tempo slider stays available, but tap-loop capture can now
+                    set the loop pace from the phrase you play.
                   </small>
                 </div>
                 <SliderField
@@ -293,6 +405,47 @@ function App() {
                     }))
                   }
                 />
+
+                <div className="tap-loop-panel">
+                  <div className="tap-loop-panel__header">
+                    <strong>Tap Loop</strong>
+                    <span data-state={tapLoopState}>{tapLoopLabel}</span>
+                  </div>
+                  <p className="tap-loop-panel__summary">{tapLoopSummary}</p>
+
+                  <div className="tap-loop-panel__buttons">
+                    <button
+                      className={[
+                        'transport-button',
+                        'transport-button--tap',
+                        tapLoopState === 'capturing'
+                          ? 'transport-button--armed'
+                          : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
+                      onClick={() => void handleTapLoopTap()}
+                    >
+                      {tapLoopState === 'capturing'
+                        ? 'Tap Phrase'
+                        : tapLoopPattern
+                          ? 'Re-record Loop'
+                          : 'Tap Loop'}
+                    </button>
+                    <button
+                      onClick={handleFinishTapLoop}
+                      disabled={tapLoopState !== 'capturing'}
+                    >
+                      Finish
+                    </button>
+                  </div>
+
+                  {tapLoopPattern ? (
+                    <div className="tap-loop-preview">
+                      Positions: {tapLoopPreview}
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </div>
           </SectionCard>
@@ -352,6 +505,7 @@ function App() {
                   value={settings.taalId}
                   onChange={(event) => {
                     const nextTaal = TAAL_BY_ID[event.target.value]
+                    clearTapLoopOverlay()
 
                     updateSettings((current) => ({
                       ...current,
@@ -373,12 +527,13 @@ function App() {
                 <select
                   id="loop-select"
                   value={selectedLoop.id}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    clearTapLoopOverlay()
                     updateSettings((current) => ({
                       ...current,
                       loopId: event.target.value,
                     }))
-                  }
+                  }}
                 >
                   {selectedTaal.loops.map((loop) => (
                     <option key={`${selectedTaal.id}-${loop.id}`} value={loop.id}>

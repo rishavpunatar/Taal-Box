@@ -71,6 +71,20 @@ export interface PracticePreset {
   tonic?: Tonic
 }
 
+export interface TapLoopHit {
+  offsetBeats: number
+  velocity: number
+}
+
+export interface TapLoopPattern {
+  beatCount: number
+  bpm: number
+  tapCount: number
+  sourceTaalId: string
+  sourceLoopId: string
+  hits: TapLoopHit[]
+}
+
 export interface AppSettings {
   taalId: string
   loopId: string
@@ -90,3 +104,4 @@ export interface CyclePosition {
 }
 
 export type PlaybackState = 'stopped' | 'playing' | 'paused'
+export type TapLoopCaptureState = 'idle' | 'capturing' | 'ready'
