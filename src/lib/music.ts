@@ -1,7 +1,7 @@
 import type { TaalDefinition, Tonic } from '../types/music'
 
 export const MIN_TEMPO = 40
-export const MAX_TEMPO = 220
+export const MAX_TEMPO = 320
 
 const TONIC_ORDER: Tonic[] = [
   'C',
