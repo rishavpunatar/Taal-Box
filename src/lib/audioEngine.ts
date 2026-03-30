@@ -66,9 +66,9 @@ export class SurSaathAudioEngine {
   private tanpuraChorus!: Tone.Chorus
   private tanpuraReverb!: Tone.Reverb
   private tanpuraVolume!: Tone.Volume
-  private tanpuraBody!: Tone.PolySynth<Tone.Synth>
-  private tanpuraShimmer!: Tone.PolySynth<Tone.Synth>
-  private tanpuraPluck!: Tone.PolySynth<Tone.Synth>
+  private tanpuraStrings!: Tone.PluckSynth[]
+  private tanpuraResonance!: Tone.PolySynth<Tone.Synth>
+  private tanpuraSympathetic!: Tone.PolySynth<Tone.Synth>
   private tanpuraJivari!: Tone.NoiseSynth
   private tanpuraJivariFilter!: Tone.Filter
 
@@ -117,15 +117,15 @@ export class SurSaathAudioEngine {
     this.tanpuraHighpass = new Tone.Filter(110, 'highpass')
     this.tanpuraFilter = new Tone.Filter(2600, 'lowpass')
     this.tanpuraChorus = new Tone.Chorus({
-      frequency: 0.09,
-      delayTime: 3.2,
-      depth: 0.08,
-      wet: 0.05,
+      frequency: 0.05,
+      delayTime: 2.2,
+      depth: 0.03,
+      wet: 0.02,
     }).start()
     this.tanpuraReverb = new Tone.Reverb({
-      decay: 6.2,
-      wet: 0.2,
-      preDelay: 0.015,
+      decay: 4.8,
+      wet: 0.12,
+      preDelay: 0.01,
     })
     this.tanpuraVolume = new Tone.Volume(-8)
     this.tanpuraBus.chain(
@@ -136,58 +136,71 @@ export class SurSaathAudioEngine {
       this.tanpuraVolume,
       Tone.Destination,
     )
-    this.tanpuraBody = new Tone.PolySynth(Tone.Synth, {
+    this.tanpuraStrings = [
+      new Tone.PluckSynth({
+        attackNoise: 2.1,
+        dampening: 2200,
+        resonance: 0.94,
+        release: 4.8,
+      }).connect(this.tanpuraBus),
+      new Tone.PluckSynth({
+        attackNoise: 1.8,
+        dampening: 2600,
+        resonance: 0.92,
+        release: 4.4,
+      }).connect(this.tanpuraBus),
+      new Tone.PluckSynth({
+        attackNoise: 1.65,
+        dampening: 2800,
+        resonance: 0.91,
+        release: 4.2,
+      }).connect(this.tanpuraBus),
+      new Tone.PluckSynth({
+        attackNoise: 1.75,
+        dampening: 2500,
+        resonance: 0.92,
+        release: 4.4,
+      }).connect(this.tanpuraBus),
+    ]
+    this.tanpuraResonance = new Tone.PolySynth(Tone.Synth, {
       oscillator: {
         type: 'custom',
-        partials: [1, 0.72, 0.38, 0.21, 0.12, 0.06],
+        partials: [1, 0.5, 0.22, 0.12, 0.05],
       },
       envelope: {
-        attack: 0.004,
-        decay: 2.4,
-        sustain: 0.44,
-        release: 7.8,
+        attack: 0.012,
+        decay: 1.7,
+        sustain: 0.14,
+        release: 5.8,
       },
-      volume: -10,
+      volume: -20,
     }).connect(this.tanpuraBus)
-    this.tanpuraShimmer = new Tone.PolySynth(Tone.Synth, {
+    this.tanpuraSympathetic = new Tone.PolySynth(Tone.Synth, {
       oscillator: {
         type: 'custom',
-        partials: [0.64, 0.28, 0.16, 0.09, 0.05, 0.03],
+        partials: [0.8, 0.32, 0.14, 0.07, 0.03],
       },
       envelope: {
-        attack: 0.03,
-        decay: 2.8,
-        sustain: 0.24,
-        release: 8.6,
+        attack: 0.04,
+        decay: 2.2,
+        sustain: 0.08,
+        release: 6.6,
       },
-      volume: -18,
-    }).connect(this.tanpuraBus)
-    this.tanpuraPluck = new Tone.PolySynth(Tone.Synth, {
-      oscillator: {
-        type: 'custom',
-        partials: [1, 0.48, 0.22, 0.09],
-      },
-      envelope: {
-        attack: 0.001,
-        decay: 0.34,
-        sustain: 0,
-        release: 0.16,
-      },
-      volume: -24,
+      volume: -28,
     }).connect(this.tanpuraBus)
     this.tanpuraJivariFilter = new Tone.Filter(2100, 'bandpass')
-    this.tanpuraJivariFilter.Q.value = 0.9
+    this.tanpuraJivariFilter.Q.value = 1.3
     this.tanpuraJivari = new Tone.NoiseSynth({
       noise: {
         type: 'pink',
       },
       envelope: {
         attack: 0.001,
-        decay: 0.18,
+        decay: 0.12,
         sustain: 0,
         release: 0.03,
       },
-      volume: -32,
+      volume: -34,
     }).connect(this.tanpuraJivariFilter)
     this.tanpuraJivariFilter.connect(this.tanpuraBus)
 
@@ -429,9 +442,9 @@ export class SurSaathAudioEngine {
       Tone.Transport.stop()
       Tone.Transport.position = '0:0:0'
       this.silenceVoices()
-      this.tanpuraBody.dispose()
-      this.tanpuraShimmer.dispose()
-      this.tanpuraPluck.dispose()
+      this.tanpuraStrings.forEach((string) => string.dispose())
+      this.tanpuraResonance.dispose()
+      this.tanpuraSympathetic.dispose()
       this.tanpuraJivari.dispose()
       this.tanpuraBus.dispose()
       this.tanpuraHighpass.dispose()
@@ -490,9 +503,11 @@ export class SurSaathAudioEngine {
       return
     }
 
-    this.tanpuraBody.releaseAll()
-    this.tanpuraShimmer.releaseAll()
-    this.tanpuraPluck.releaseAll()
+    this.tanpuraStrings.forEach((string) => {
+      string.triggerRelease()
+    })
+    this.tanpuraResonance.releaseAll()
+    this.tanpuraSympathetic.releaseAll()
   }
 
   private getLoopAudioUrl(audioLoop: TaalLoopAudio) {
@@ -733,56 +748,55 @@ export class SurSaathAudioEngine {
     const fifth = getPerfectFifth(this.currentTonic)
     const strokes = [
       {
-        body: `${fifth}2`,
-        shimmer: [`${fifth}3`, `${this.currentTonic}3`],
-        pluck: `${fifth}3`,
-        velocity: 0.25,
+        string: `${fifth}2`,
+        resonance: [`${fifth}3`, `${this.currentTonic}3`],
+        sympathetic: [`${this.currentTonic}4`],
+        velocity: 0.24,
       },
       {
-        body: `${this.currentTonic}3`,
-        shimmer: [`${this.currentTonic}3`, `${this.currentTonic}4`],
-        pluck: `${this.currentTonic}4`,
-        velocity: 0.32,
-      },
-      {
-        body: `${this.currentTonic}3`,
-        shimmer: [`${this.currentTonic}4`, `${fifth}4`],
-        pluck: `${this.currentTonic}4`,
-        velocity: 0.29,
-      },
-      {
-        body: `${this.currentTonic}3`,
-        shimmer: [`${this.currentTonic}4`, `${this.currentTonic}5`],
-        pluck: `${this.currentTonic}4`,
+        string: `${this.currentTonic}3`,
+        resonance: [`${this.currentTonic}3`, `${this.currentTonic}4`],
+        sympathetic: [`${fifth}4`, `${this.currentTonic}5`],
         velocity: 0.31,
+      },
+      {
+        string: `${this.currentTonic}3`,
+        resonance: [`${this.currentTonic}4`, `${fifth}4`],
+        sympathetic: [`${this.currentTonic}5`],
+        velocity: 0.28,
+      },
+      {
+        string: `${this.currentTonic}3`,
+        resonance: [`${this.currentTonic}4`, `${this.currentTonic}5`],
+        sympathetic: [`${fifth}4`],
+        velocity: 0.3,
       },
     ] as const
 
     TANPURA_STROKE_OFFSETS.forEach((offset, index) => {
       const stroke = strokes[index]
       const strokeTime = time + offset
-      this.tanpuraBody.triggerAttackRelease(
-        stroke.body,
-        7.8,
+      const stringVoice = this.tanpuraStrings[index]
+
+      stringVoice.triggerAttack(stroke.string, strokeTime)
+      stringVoice.triggerRelease(strokeTime + 0.08)
+
+      this.tanpuraResonance.triggerAttackRelease(
+        [...stroke.resonance],
+        5.2,
         strokeTime,
-        stroke.velocity,
+        stroke.velocity * 0.9,
       )
-      this.tanpuraPluck.triggerAttackRelease(
-        stroke.pluck,
-        0.24,
-        strokeTime,
-        stroke.velocity * 0.46,
-      )
-      this.tanpuraShimmer.triggerAttackRelease(
-        [...stroke.shimmer],
-        8.4,
-        strokeTime + 0.018,
-        stroke.velocity * 0.84,
+      this.tanpuraSympathetic.triggerAttackRelease(
+        [...stroke.sympathetic],
+        6.4,
+        strokeTime + 0.03,
+        stroke.velocity * 0.44,
       )
       this.tanpuraJivari.triggerAttackRelease(
-        '16n',
-        strokeTime + 0.01,
-        stroke.velocity * 0.28,
+        '32n',
+        strokeTime + 0.006,
+        stroke.velocity * 0.24,
       )
     })
   }
