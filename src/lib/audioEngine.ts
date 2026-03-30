@@ -22,6 +22,10 @@ const TANPURA_CYCLE_SECONDS = 4.78
 const TANPURA_SAMPLE_SOURCE_TONIC: Tonic = 'C'
 const TABLA_SAMPLE_BASE_URL = `${import.meta.env.BASE_URL}audio/tabla-fs/`
 const TANPURA_SAMPLE_URL = `${import.meta.env.BASE_URL}audio/tanpura/electronic-tanpura-c-pa-mid.mp3`
+const TANPURA_LOOP_START_SECONDS = 6
+const TANPURA_LOOP_END_SECONDS = 248
+const TANPURA_GRAIN_SIZE = 0.32
+const TANPURA_GRAIN_OVERLAP = 0.14
 const LIVE_LOOP_GRAIN_SIZE = 0.14
 const LIVE_LOOP_GRAIN_OVERLAP = 0.07
 const TABLA_SAMPLE_NOTES = {
@@ -60,6 +64,8 @@ export class SurSaathAudioEngine {
   private currentStepIndex = 0
   private currentCycle = 1
   private initialized = false
+  private audioUnlocked = false
+  private primePromise: Promise<void> | null = null
   private onCyclePosition?: (position: CyclePosition) => void
 
   private tanpuraBus!: Tone.Gain
@@ -68,7 +74,7 @@ export class SurSaathAudioEngine {
   private tanpuraChorus!: Tone.Chorus
   private tanpuraReverb!: Tone.Reverb
   private tanpuraVolume!: Tone.Volume
-  private tanpuraSample!: Tone.Player
+  private tanpuraSample!: Tone.GrainPlayer
   private tanpuraSampleLoaded = false
   private tanpuraStrings!: Tone.PluckSynth[]
   private tanpuraResonance!: Tone.PolySynth<Tone.Synth>
@@ -109,12 +115,32 @@ export class SurSaathAudioEngine {
     this.emitIdlePosition()
   }
 
-  async ensureReady() {
+  async prime() {
     if (this.initialized) {
       return
     }
 
+    if (this.primePromise) {
+      await this.primePromise
+      return
+    }
+
+    this.primePromise = this.initializeGraph()
+    await this.primePromise
+  }
+
+  async ensureReady() {
+    await this.prime()
+
+    if (this.audioUnlocked) {
+      return
+    }
+
     await Tone.start()
+    this.audioUnlocked = true
+  }
+
+  private async initializeGraph() {
     Tone.getContext().lookAhead = 0.16
 
     this.tanpuraBus = new Tone.Gain(0.9)
@@ -208,13 +234,16 @@ export class SurSaathAudioEngine {
     }).connect(this.tanpuraJivariFilter)
     this.tanpuraJivariFilter.connect(this.tanpuraBus)
     const tanpuraSampleReady = new Promise<void>((resolve) => {
-      this.tanpuraSample = new Tone.Player({
+      this.tanpuraSample = new Tone.GrainPlayer({
         url: TANPURA_SAMPLE_URL,
         loop: true,
-        fadeIn: 0.28,
-        fadeOut: 0.4,
+        grainSize: TANPURA_GRAIN_SIZE,
+        overlap: TANPURA_GRAIN_OVERLAP,
+        loopStart: TANPURA_LOOP_START_SECONDS,
+        loopEnd: TANPURA_LOOP_END_SECONDS,
         onload: () => {
           this.tanpuraSampleLoaded = true
+          this.updateTanpuraSamplePitch()
           resolve()
         },
         onerror: () => {
@@ -371,8 +400,8 @@ export class SurSaathAudioEngine {
       return
     }
 
-    this.startTanpuraDrone('+0.05')
-    Tone.Transport.start('+0.05')
+    this.startTanpuraDrone()
+    Tone.Transport.start('+0.03')
   }
 
   pause() {
@@ -410,6 +439,7 @@ export class SurSaathAudioEngine {
     this.silenceVoices()
 
     if (wasPlaying) {
+      this.startTanpuraDrone()
       Tone.Transport.start('+0.05')
     }
   }
@@ -437,7 +467,7 @@ export class SurSaathAudioEngine {
 
   setTonic(tonic: Tonic) {
     this.currentTonic = tonic
-    this.updateTanpuraSamplePlaybackRate()
+    this.updateTanpuraSamplePitch()
     this.updateActiveLoopPitch()
   }
 
@@ -540,19 +570,13 @@ export class SurSaathAudioEngine {
     return `${import.meta.env.BASE_URL}${audioLoop.url.replace(/^\/+/, '')}`
   }
 
-  private getTanpuraPlaybackRate() {
-    return Math.pow(
-      2,
-      getClosestTonicInterval(TANPURA_SAMPLE_SOURCE_TONIC, this.currentTonic) / 12,
-    )
-  }
-
-  private updateTanpuraSamplePlaybackRate() {
+  private updateTanpuraSamplePitch() {
     if (!this.tanpuraSample) {
       return
     }
 
-    this.tanpuraSample.playbackRate = this.getTanpuraPlaybackRate()
+    this.tanpuraSample.detune =
+      getClosestTonicInterval(TANPURA_SAMPLE_SOURCE_TONIC, this.currentTonic) * 100
   }
 
   private startTanpuraDrone(time?: Tone.Unit.Time) {
@@ -560,13 +584,13 @@ export class SurSaathAudioEngine {
       return
     }
 
-    this.updateTanpuraSamplePlaybackRate()
+    this.updateTanpuraSamplePitch()
 
     if (this.tanpuraSample.state === 'started') {
       return
     }
 
-    this.tanpuraSample.start(time)
+    this.tanpuraSample.start(time, TANPURA_LOOP_START_SECONDS)
   }
 
   private stopTanpuraDrone(time?: Tone.Unit.Time) {

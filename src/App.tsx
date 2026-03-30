@@ -69,6 +69,7 @@ function App() {
     )
     engine.setOnCyclePosition(handleCyclePosition)
     audioEngineRef.current = engine
+    void engine.prime()
 
     return () => {
       engine.dispose()
