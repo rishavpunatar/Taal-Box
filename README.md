@@ -51,11 +51,12 @@ If GitHub Pages is not already configured for the repository, set:
 ## Project structure
 
 - `src/data/taals.ts`: taal definitions, loop/style variants, and vibhag structure
-- `src/lib/audioEngine.ts`: Tone.js scheduling, tanpura synthesis, and sample-mapped tabla playback
+- `src/lib/audioEngine.ts`: Tone.js scheduling, sample-based tanpura playback, and sample-mapped tabla playback
 - `src/lib/transitionFills.ts`: light cycle-end fill patterns that keep repeated loops from feeling static
 - `src/lib/storage.ts`: local storage persistence
 - `src/components/`: UI building blocks
 - `public/audio/tabla-fs/`: named tabla-bol previews used by the taal engine
+- `public/audio/tanpura/`: bundled tanpura drone source and attribution
 
 ## Editing taals and loops
 
@@ -101,7 +102,7 @@ python3 scripts/extract_tabla_samples.py
 
 ## Limitations
 
-- The tanpura is synthesized in-browser, while the tabla layer uses a compact derived sample set rather than a full multi-velocity studio library.
+- The tanpura now uses a bundled sampled drone, but it is still one compact source recording retuned across tonics rather than a full multi-sampled tanpura library.
 - Browser audio timing is solid for practice use, but it is not a replacement for dedicated hardware.
 - Audio must be started by user interaction because browsers block autoplay.
 - Some light-classical and ghazal-oriented loop variants are practical interpretations built from standard theka references rather than exact gharana-specific transcriptions.
@@ -110,10 +111,12 @@ python3 scripts/extract_tabla_samples.py
 
 The active tabla playback bank in `public/audio/tabla-fs/` comes from the Freesound pack `Tabla Strokes` by `ajaysm`, licensed under CC BY 4.0. See `public/audio/tabla-fs/ATTRIBUTION.md`.
 
+The active tanpura drone in `public/audio/tanpura/` comes from `Electronic Tanpura 9` by `sankalp` on Freesound, licensed under CC BY 4.0. See `public/audio/tanpura/ATTRIBUTION.md`.
+
 ## Good next improvements
 
 - add per-loop swing and subdivision controls
 - add user-selectable fill density or a "steady / active" accompaniment mode
 - add pitch reference for male/female tonic ranges
-- add sample-based tabla and tanpura sound sets
+- add multiple tanpura sample sets for different timbres and tonic ranges
 - add lehra or tanpura fine-tuning options

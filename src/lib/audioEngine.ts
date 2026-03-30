@@ -19,7 +19,9 @@ import { getTransitionFill } from './transitionFills'
 
 const TANPURA_STROKE_OFFSETS = [0, 1.18, 2.36, 3.56] as const
 const TANPURA_CYCLE_SECONDS = 4.78
+const TANPURA_SAMPLE_SOURCE_TONIC: Tonic = 'C'
 const TABLA_SAMPLE_BASE_URL = `${import.meta.env.BASE_URL}audio/tabla-fs/`
+const TANPURA_SAMPLE_URL = `${import.meta.env.BASE_URL}audio/tanpura/electronic-tanpura-c-pa-mid.mp3`
 const LIVE_LOOP_GRAIN_SIZE = 0.14
 const LIVE_LOOP_GRAIN_OVERLAP = 0.07
 const TABLA_SAMPLE_NOTES = {
@@ -66,6 +68,8 @@ export class SurSaathAudioEngine {
   private tanpuraChorus!: Tone.Chorus
   private tanpuraReverb!: Tone.Reverb
   private tanpuraVolume!: Tone.Volume
+  private tanpuraSample!: Tone.Player
+  private tanpuraSampleLoaded = false
   private tanpuraStrings!: Tone.PluckSynth[]
   private tanpuraResonance!: Tone.PolySynth<Tone.Synth>
   private tanpuraSympathetic!: Tone.PolySynth<Tone.Synth>
@@ -203,6 +207,22 @@ export class SurSaathAudioEngine {
       volume: -34,
     }).connect(this.tanpuraJivariFilter)
     this.tanpuraJivariFilter.connect(this.tanpuraBus)
+    const tanpuraSampleReady = new Promise<void>((resolve) => {
+      this.tanpuraSample = new Tone.Player({
+        url: TANPURA_SAMPLE_URL,
+        loop: true,
+        fadeIn: 0.28,
+        fadeOut: 0.4,
+        onload: () => {
+          this.tanpuraSampleLoaded = true
+          resolve()
+        },
+        onerror: () => {
+          this.tanpuraSampleLoaded = false
+          resolve()
+        },
+      }).connect(this.tanpuraBus)
+    })
 
     this.percussionBus = new Tone.Gain(1)
     this.liveLoopBus = new Tone.Gain(0.92)
@@ -321,6 +341,7 @@ export class SurSaathAudioEngine {
     })
 
     await Promise.all([
+      tanpuraSampleReady,
       this.tanpuraReverb.generate(),
       this.percussionReverb.generate(),
       samplerReady,
@@ -346,9 +367,11 @@ export class SurSaathAudioEngine {
     await this.prepareCurrentLoopAudio()
 
     if (Tone.Transport.state === 'started') {
+      this.startTanpuraDrone()
       return
     }
 
+    this.startTanpuraDrone('+0.05')
     Tone.Transport.start('+0.05')
   }
 
@@ -414,6 +437,7 @@ export class SurSaathAudioEngine {
 
   setTonic(tonic: Tonic) {
     this.currentTonic = tonic
+    this.updateTanpuraSamplePlaybackRate()
     this.updateActiveLoopPitch()
   }
 
@@ -446,6 +470,7 @@ export class SurSaathAudioEngine {
       this.tanpuraResonance.dispose()
       this.tanpuraSympathetic.dispose()
       this.tanpuraJivari.dispose()
+      this.tanpuraSample.dispose()
       this.tanpuraBus.dispose()
       this.tanpuraHighpass.dispose()
       this.tanpuraFilter.dispose()
@@ -503,6 +528,7 @@ export class SurSaathAudioEngine {
       return
     }
 
+    this.stopTanpuraDrone()
     this.tanpuraStrings.forEach((string) => {
       string.triggerRelease()
     })
@@ -512,6 +538,43 @@ export class SurSaathAudioEngine {
 
   private getLoopAudioUrl(audioLoop: TaalLoopAudio) {
     return `${import.meta.env.BASE_URL}${audioLoop.url.replace(/^\/+/, '')}`
+  }
+
+  private getTanpuraPlaybackRate() {
+    return Math.pow(
+      2,
+      getClosestTonicInterval(TANPURA_SAMPLE_SOURCE_TONIC, this.currentTonic) / 12,
+    )
+  }
+
+  private updateTanpuraSamplePlaybackRate() {
+    if (!this.tanpuraSample) {
+      return
+    }
+
+    this.tanpuraSample.playbackRate = this.getTanpuraPlaybackRate()
+  }
+
+  private startTanpuraDrone(time?: Tone.Unit.Time) {
+    if (!this.tanpuraSampleLoaded) {
+      return
+    }
+
+    this.updateTanpuraSamplePlaybackRate()
+
+    if (this.tanpuraSample.state === 'started') {
+      return
+    }
+
+    this.tanpuraSample.start(time)
+  }
+
+  private stopTanpuraDrone(time?: Tone.Unit.Time) {
+    if (!this.tanpuraSampleLoaded || this.tanpuraSample.state !== 'started') {
+      return
+    }
+
+    this.tanpuraSample.stop(time)
   }
 
   private async createLoopPlayer(audioLoop: TaalLoopAudio) {
@@ -745,6 +808,10 @@ export class SurSaathAudioEngine {
   }
 
   private playTanpuraCycle(time: number) {
+    if (this.tanpuraSampleLoaded) {
+      return
+    }
+
     const fifth = getPerfectFifth(this.currentTonic)
     const strokes = [
       {
