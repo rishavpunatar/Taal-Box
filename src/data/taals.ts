@@ -42,7 +42,6 @@ const naDhin = (label = 'NaDhin') => matra(label, 'Na', 'Dhin')
 const naTin = (label = 'NaTin') => matra(label, 'Na', 'Tin')
 const tiTe = (label = 'TiTe') => matra(label, 'Ti', 'Ta')
 const kaTa = (label = 'KaTa') => matra(label, 'Ka', 'Ta')
-const taGe = (label = 'TaGe') => matra(label, 'Ta', 'Ge')
 
 const loop = (
   id: string,
@@ -500,11 +499,11 @@ export const TAALS: TaalDefinition[] = [
           matra('Dha', 'Dha'),
           matra('Din', 'Dhin'),
           matra('Ta', 'Ta'),
-          matra('Kat', 'Kat'),
-          taGe(),
+          matra('KiTe', 'Ki', 'Ta'),
+          matra('Dha', 'Dha'),
           matra('Din', 'Dhin'),
           matra('Ta', 'Ta'),
-          tiTe('TeTe'),
+          tiTe('TiTe'),
           kaTa(),
           gaDi('GaDi'),
           gheNe('GeNe'),
