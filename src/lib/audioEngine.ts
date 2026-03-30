@@ -20,8 +20,8 @@ import { getTransitionFill } from './transitionFills'
 const TANPURA_STROKE_OFFSETS = [0, 1.18, 2.36, 3.56] as const
 const TANPURA_CYCLE_SECONDS = 4.78
 const TABLA_SAMPLE_BASE_URL = `${import.meta.env.BASE_URL}audio/tabla-fs/`
-const LIVE_LOOP_GRAIN_SIZE = 0.11
-const LIVE_LOOP_GRAIN_OVERLAP = 0.045
+const LIVE_LOOP_GRAIN_SIZE = 0.14
+const LIVE_LOOP_GRAIN_OVERLAP = 0.07
 const TABLA_SAMPLE_NOTES = {
   dha: 'C3',
   dhin: 'D3',
@@ -61,14 +61,22 @@ export class SurSaathAudioEngine {
   private onCyclePosition?: (position: CyclePosition) => void
 
   private tanpuraBus!: Tone.Gain
+  private tanpuraHighpass!: Tone.Filter
   private tanpuraFilter!: Tone.Filter
   private tanpuraChorus!: Tone.Chorus
   private tanpuraReverb!: Tone.Reverb
   private tanpuraVolume!: Tone.Volume
   private tanpuraBody!: Tone.PolySynth<Tone.Synth>
   private tanpuraShimmer!: Tone.PolySynth<Tone.Synth>
+  private tanpuraPluck!: Tone.PolySynth<Tone.Synth>
+  private tanpuraJivari!: Tone.NoiseSynth
+  private tanpuraJivariFilter!: Tone.Filter
 
   private percussionBus!: Tone.Gain
+  private liveLoopBus!: Tone.Gain
+  private liveLoopHighpass!: Tone.Filter
+  private liveLoopLowpass!: Tone.Filter
+  private liveLoopCompressor!: Tone.Compressor
   private percussionCompressor!: Tone.Compressor
   private percussionReverb!: Tone.Reverb
   private percussionVolume!: Tone.Volume
@@ -103,23 +111,25 @@ export class SurSaathAudioEngine {
     }
 
     await Tone.start()
-    Tone.getContext().lookAhead = 0.12
+    Tone.getContext().lookAhead = 0.16
 
-    this.tanpuraBus = new Tone.Gain(0.95)
-    this.tanpuraFilter = new Tone.Filter(1900, 'lowpass')
+    this.tanpuraBus = new Tone.Gain(0.9)
+    this.tanpuraHighpass = new Tone.Filter(110, 'highpass')
+    this.tanpuraFilter = new Tone.Filter(2600, 'lowpass')
     this.tanpuraChorus = new Tone.Chorus({
-      frequency: 0.12,
-      delayTime: 4.2,
-      depth: 0.18,
-      wet: 0.1,
+      frequency: 0.09,
+      delayTime: 3.2,
+      depth: 0.08,
+      wet: 0.05,
     }).start()
     this.tanpuraReverb = new Tone.Reverb({
-      decay: 9.4,
-      wet: 0.34,
-      preDelay: 0.02,
+      decay: 6.2,
+      wet: 0.2,
+      preDelay: 0.015,
     })
     this.tanpuraVolume = new Tone.Volume(-8)
     this.tanpuraBus.chain(
+      this.tanpuraHighpass,
       this.tanpuraFilter,
       this.tanpuraChorus,
       this.tanpuraReverb,
@@ -128,30 +138,64 @@ export class SurSaathAudioEngine {
     )
     this.tanpuraBody = new Tone.PolySynth(Tone.Synth, {
       oscillator: {
-        type: 'sine4',
+        type: 'custom',
+        partials: [1, 0.72, 0.38, 0.21, 0.12, 0.06],
       },
       envelope: {
-        attack: 0.07,
-        decay: 1.1,
-        sustain: 0.62,
-        release: 5.4,
+        attack: 0.004,
+        decay: 2.4,
+        sustain: 0.44,
+        release: 7.8,
       },
-      volume: -11,
+      volume: -10,
     }).connect(this.tanpuraBus)
     this.tanpuraShimmer = new Tone.PolySynth(Tone.Synth, {
       oscillator: {
-        type: 'triangle4',
+        type: 'custom',
+        partials: [0.64, 0.28, 0.16, 0.09, 0.05, 0.03],
       },
       envelope: {
-        attack: 0.11,
-        decay: 1.6,
-        sustain: 0.28,
-        release: 6.2,
+        attack: 0.03,
+        decay: 2.8,
+        sustain: 0.24,
+        release: 8.6,
       },
       volume: -18,
     }).connect(this.tanpuraBus)
+    this.tanpuraPluck = new Tone.PolySynth(Tone.Synth, {
+      oscillator: {
+        type: 'custom',
+        partials: [1, 0.48, 0.22, 0.09],
+      },
+      envelope: {
+        attack: 0.001,
+        decay: 0.34,
+        sustain: 0,
+        release: 0.16,
+      },
+      volume: -24,
+    }).connect(this.tanpuraBus)
+    this.tanpuraJivariFilter = new Tone.Filter(2100, 'bandpass')
+    this.tanpuraJivariFilter.Q.value = 0.9
+    this.tanpuraJivari = new Tone.NoiseSynth({
+      noise: {
+        type: 'pink',
+      },
+      envelope: {
+        attack: 0.001,
+        decay: 0.18,
+        sustain: 0,
+        release: 0.03,
+      },
+      volume: -32,
+    }).connect(this.tanpuraJivariFilter)
+    this.tanpuraJivariFilter.connect(this.tanpuraBus)
 
     this.percussionBus = new Tone.Gain(1)
+    this.liveLoopBus = new Tone.Gain(0.92)
+    this.liveLoopHighpass = new Tone.Filter(120, 'highpass')
+    this.liveLoopLowpass = new Tone.Filter(3400, 'lowpass')
+    this.liveLoopCompressor = new Tone.Compressor(-16, 3)
     this.percussionCompressor = new Tone.Compressor(-20, 4)
     this.percussionReverb = new Tone.Reverb({
       decay: 1.15,
@@ -164,6 +208,12 @@ export class SurSaathAudioEngine {
       this.percussionReverb,
       this.percussionVolume,
       Tone.Destination,
+    )
+    this.liveLoopBus.chain(
+      this.liveLoopHighpass,
+      this.liveLoopLowpass,
+      this.liveLoopCompressor,
+      this.percussionVolume,
     )
     this.percussionNoiseFilter = new Tone.Filter(2200, 'highpass')
     this.percussionNoiseFilter.connect(this.percussionBus)
@@ -381,13 +431,21 @@ export class SurSaathAudioEngine {
       this.silenceVoices()
       this.tanpuraBody.dispose()
       this.tanpuraShimmer.dispose()
+      this.tanpuraPluck.dispose()
+      this.tanpuraJivari.dispose()
       this.tanpuraBus.dispose()
+      this.tanpuraHighpass.dispose()
       this.tanpuraFilter.dispose()
       this.tanpuraChorus.dispose()
       this.tanpuraReverb.dispose()
       this.tanpuraVolume.dispose()
+      this.tanpuraJivariFilter.dispose()
 
       this.percussionBus.dispose()
+      this.liveLoopBus.dispose()
+      this.liveLoopHighpass.dispose()
+      this.liveLoopLowpass.dispose()
+      this.liveLoopCompressor.dispose()
       this.percussionCompressor.dispose()
       this.percussionReverb.dispose()
       this.percussionVolume.dispose()
@@ -434,6 +492,7 @@ export class SurSaathAudioEngine {
 
     this.tanpuraBody.releaseAll()
     this.tanpuraShimmer.releaseAll()
+    this.tanpuraPluck.releaseAll()
   }
 
   private getLoopAudioUrl(audioLoop: TaalLoopAudio) {
@@ -450,7 +509,7 @@ export class SurSaathAudioEngine {
           overlap: LIVE_LOOP_GRAIN_OVERLAP,
           onload: () => resolve(player),
           onerror: () => resolve(player),
-        }).connect(this.percussionBus)
+        }).connect(this.liveLoopBus)
 
         return
       }
@@ -462,7 +521,7 @@ export class SurSaathAudioEngine {
         fadeOut: 0.04,
         onload: () => resolve(player),
         onerror: () => resolve(player),
-      }).connect(this.percussionBus)
+      }).connect(this.liveLoopBus)
     })
   }
 
@@ -676,22 +735,26 @@ export class SurSaathAudioEngine {
       {
         body: `${fifth}2`,
         shimmer: [`${fifth}3`, `${this.currentTonic}3`],
-        velocity: 0.28,
+        pluck: `${fifth}3`,
+        velocity: 0.25,
       },
       {
         body: `${this.currentTonic}3`,
         shimmer: [`${this.currentTonic}3`, `${this.currentTonic}4`],
-        velocity: 0.35,
-      },
-      {
-        body: `${this.currentTonic}3`,
-        shimmer: [`${this.currentTonic}4`, `${fifth}4`],
+        pluck: `${this.currentTonic}4`,
         velocity: 0.32,
       },
       {
         body: `${this.currentTonic}3`,
+        shimmer: [`${this.currentTonic}4`, `${fifth}4`],
+        pluck: `${this.currentTonic}4`,
+        velocity: 0.29,
+      },
+      {
+        body: `${this.currentTonic}3`,
         shimmer: [`${this.currentTonic}4`, `${this.currentTonic}5`],
-        velocity: 0.34,
+        pluck: `${this.currentTonic}4`,
+        velocity: 0.31,
       },
     ] as const
 
@@ -700,15 +763,26 @@ export class SurSaathAudioEngine {
       const strokeTime = time + offset
       this.tanpuraBody.triggerAttackRelease(
         stroke.body,
-        5.4,
+        7.8,
         strokeTime,
         stroke.velocity,
       )
+      this.tanpuraPluck.triggerAttackRelease(
+        stroke.pluck,
+        0.24,
+        strokeTime,
+        stroke.velocity * 0.46,
+      )
       this.tanpuraShimmer.triggerAttackRelease(
         [...stroke.shimmer],
-        6.2,
-        strokeTime,
-        stroke.velocity,
+        8.4,
+        strokeTime + 0.018,
+        stroke.velocity * 0.84,
+      )
+      this.tanpuraJivari.triggerAttackRelease(
+        '16n',
+        strokeTime + 0.01,
+        stroke.velocity * 0.28,
       )
     })
   }
