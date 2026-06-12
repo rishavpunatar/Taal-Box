@@ -1,7 +1,6 @@
 import type {
   Bol,
   TaalBeat,
-  TaalLoopAudio,
   TaalDefinition,
   TaalLoopVariant,
   TaalStroke,
@@ -32,6 +31,9 @@ const customMatra = (label: string, strokes: TaalStroke[]): TaalBeat => ({
 const late = (label: string, bol: Bol, offset = 0.56, velocity = 0.92) =>
   customMatra(label, [stroke(bol, offset, velocity)])
 
+// An avagraha (rest) matra: the previous stroke rings through it.
+const rest = (label = '–'): TaalBeat => ({ label, strokes: [] })
+
 const tiReKiTa = (label = 'TiReKiTa') => matra(label, 'Ti', 'Re', 'Ki', 'Ta')
 const dhaGe = (label = 'DhaGe') => matra(label, 'Dha', 'Ge')
 const taKe = (label = 'TaKe') => matra(label, 'Ta', 'Ka')
@@ -48,13 +50,13 @@ const loop = (
   label: string,
   summary: string,
   beats: TaalBeat[],
-  audioLoop?: TaalLoopAudio,
+  extras?: Pick<TaalLoopVariant, 'dynamics' | 'suggestedTempo'>,
 ): TaalLoopVariant => ({
   id,
   label,
   summary,
   beats,
-  ...(audioLoop ? { audioLoop } : {}),
+  ...(extras ?? {}),
 })
 
 const taal = (definition: TaalDefinition): TaalDefinition => {
@@ -124,12 +126,12 @@ export const TAALS: TaalDefinition[] = [
       loop(
         'standard',
         'Standard',
-        'A clear twelve-beat ektaal built from the commonly taught tabla theka.',
+        'The standard twelve-beat theka: Dhin Dhin | DhaGe TiReKiTa | Tu Na | Kat Ta | DhaGe TiReKiTa | Dhin Na.',
         [
           matra('Dhin', 'Dhin'),
           matra('Dhin', 'Dhin'),
-          matra('Dha', 'Dha'),
-          matra('Dha', 'Dha'),
+          dhaGe(),
+          tiReKiTa(),
           matra('Tu', 'Tu'),
           matra('Na', 'Na'),
           matra('Kat', 'Kat'),
@@ -137,7 +139,7 @@ export const TAALS: TaalDefinition[] = [
           dhaGe(),
           tiReKiTa(),
           matra('Dhin', 'Dhin'),
-          dhaGe(),
+          matra('Na', 'Na'),
         ],
       ),
     ],
@@ -240,27 +242,22 @@ export const TAALS: TaalDefinition[] = [
       loop(
         'ghazal',
         'Ghazal',
-        'A lighter dadra phrasing backed by a bundled live ghazal-style loop recording.',
+        'A bayan-led ghazal groove transcribed stroke-for-stroke from a live tabla recording: resonant ghin on sam, a crisp tak answer on three, and a dha–ka turnaround into the next cycle. Recorded feel sits near 142 BPM.',
         [
-          matra('Dha', 'Dha'),
-          matra('Dhi', 'Dhi'),
-          matra('Na', 'Na'),
-          matra('Dha', 'Dha'),
-          matra('Tu', 'Tu'),
-          matra('Na', 'Na'),
+          // Transcribed from a live recording (33s, 12 cycles, cycle ≈ 2.54s).
+          // Offsets are fractions of a matra; velocities are as played.
+          customMatra('Dhin', [stroke('Dhin', 0, 1)]),
+          customMatra('Ge', [stroke('Ge', 0.073, 0.28)]),
+          customMatra('TakKa', [stroke('Tak', 0.065, 0.91), stroke('Ka', 0.541, 0.44)]),
+          customMatra('Ge', [stroke('Ge', 0.041, 0.66)]),
+          customMatra('GeDha', [
+            stroke('Ge', 0.02, 0.63),
+            stroke('Ge', 0.44, 0.18),
+            stroke('Dha', 0.97, 0.67),
+          ]),
+          customMatra('Ka', [stroke('Kat', 0.493, 0.6)]),
         ],
-        {
-          url: 'audio/loops/dadra-ghazal-live.mp3',
-          sourceBpm: 120,
-          sourceTonic: 'D',
-          preservePitch: true,
-          mode: 'replace',
-          loop: true,
-          loopStartSeconds: 3.77,
-          loopEndSeconds: 6.77,
-          accentBeats: [1, 4],
-          accentGain: 0.82,
-        },
+        { dynamics: 'authored', suggestedTempo: 142 },
       ),
       loop(
         'light',
@@ -291,12 +288,12 @@ export const TAALS: TaalDefinition[] = [
       loop(
         'standard',
         'Standard',
-        'A steady keharwa pulse that works for most day-to-day practice.',
+        'The standard theka: Dha Ge Na Ti | Na Ka Dhi Na, with the khali answer in the second half.',
         [
           matra('Dha', 'Dha'),
           matra('Ge', 'Ge'),
           matra('Na', 'Na'),
-          matra('Tin', 'Tin'),
+          matra('Ti', 'Ti'),
           matra('Na', 'Na'),
           matra('Ka', 'Ka'),
           matra('Dhi', 'Dhi'),
@@ -341,7 +338,7 @@ export const TAALS: TaalDefinition[] = [
           matra('Dhin', 'Dhin'),
           matra('Dhin', 'Dhin'),
           matra('Dha', 'Dha'),
-          dhaGe(),
+          matra('Dha', 'Dha'),
           matra('Tin', 'Tin'),
           matra('Tin', 'Tin'),
           matra('Ta', 'Ta'),
@@ -349,7 +346,7 @@ export const TAALS: TaalDefinition[] = [
           matra('Dhin', 'Dhin'),
           matra('Dhin', 'Dhin'),
           matra('Dha', 'Dha'),
-          dhaGe(),
+          matra('Dha', 'Dha'),
           matra('Dhin', 'Dhin'),
           matra('Dhin', 'Dhin'),
         ],
@@ -404,22 +401,22 @@ export const TAALS: TaalDefinition[] = [
       loop(
         'standard',
         'Standard',
-        'Classic deepchandi with avagraha spaces left open between the main bols.',
+        'Classic deepchandi with true avagraha rests, so the open spaces breathe as taught: Dha Dhin – | Dha Dha Tin – | Ta Tin – | Dha Dha Dhin –.',
         [
           matra('Dha', 'Dha'),
           matra('Dhin', 'Dhin'),
-          matra('Dha -', 'Dha'),
+          rest(),
           matra('Dha', 'Dha'),
           matra('Dha', 'Dha'),
           matra('Tin', 'Tin'),
-          matra('Ta -', 'Ta'),
+          rest(),
           matra('Ta', 'Ta'),
           matra('Tin', 'Tin'),
-          matra('Dha -', 'Dha'),
+          rest(),
           matra('Dha', 'Dha'),
           matra('Dha', 'Dha'),
           matra('Dhin', 'Dhin'),
-          matra('Dha -', 'Dha'),
+          rest(),
         ],
       ),
       loop(
@@ -459,22 +456,22 @@ export const TAALS: TaalDefinition[] = [
       loop(
         'standard',
         'Standard',
-        'A tabla-adapted dhamar loop based on the commonly recited pakhawaj-style theka.',
+        'The commonly recited theka adapted for tabla, with its true rests: Ka Dhi Ta Dhi Ta | Dha – | Ga Ti Ta | Ti Ta Ta –.',
         [
           matra('Ka', 'Ka'),
-          matra('Dhe', 'Dhi'),
-          matra('Te', 'Ta'),
-          matra('Dhe', 'Dhi'),
-          matra('Te', 'Ta'),
-          matra('Dha', 'Dha'),
-          matra('Dha -', 'Dha'),
-          gaDi('GaDi'),
-          matra('Na', 'Na'),
-          matra('DiNa', 'Dhi', 'Na'),
+          matra('Dhi', 'Dhi'),
+          matra('Ta', 'Ta'),
+          matra('Dhi', 'Dhi'),
           matra('Ta', 'Ta'),
           matra('Dha', 'Dha'),
-          matra('Dha', 'Dha'),
-          matra('Ta -', 'Ta'),
+          rest(),
+          matra('Ga', 'Ge'),
+          matra('Ti', 'Ti'),
+          matra('Ta', 'Ta'),
+          matra('Ti', 'Ti'),
+          matra('Ta', 'Ta'),
+          matra('Ta', 'Ta'),
+          rest(),
         ],
       ),
     ],
@@ -517,7 +514,7 @@ export const TAALS: TaalDefinition[] = [
     totalMatras: 14,
     vibhags: [2, 2, 2, 2, 2, 2, 2],
     sam: 1,
-    khali: [3, 7, 13],
+    khali: [5, 9, 13],
     summary:
       'A broad vilambit 14-beat cycle in seven equal vibhags, often used for bada khayal.',
     defaultLoopId: 'standard',
@@ -525,7 +522,7 @@ export const TAALS: TaalDefinition[] = [
       loop(
         'standard',
         'Vilambit',
-        'Ara Chautaal with even two-beat vibhags and a stately forward motion.',
+        'Ada Chautaal with even two-beat vibhags and the clap pattern X 2 0 3 0 4 0.',
         [
           matra('Dhin', 'Dhin'),
           tiReKiTa(),
@@ -535,7 +532,7 @@ export const TAALS: TaalDefinition[] = [
           matra('Na', 'Na'),
           matra('Kat', 'Kat'),
           matra('Ta', 'Ta'),
-          matra('Dhin', 'Dhin'),
+          tiReKiTa(),
           matra('Dhin', 'Dhin'),
           matra('Na', 'Na'),
           matra('Dhin', 'Dhin'),
@@ -659,7 +656,7 @@ export const TAALS: TaalDefinition[] = [
       loop(
         'standard',
         'Standard',
-        'A compact, practiceable Pancham Savari loop built around the widely taught 3 + 4 + 4 + 4 structure.',
+        'A compact, practiceable Pancham Savari loop built around the widely taught 3 + 4 + 4 + 4 structure, with a clearly khali third vibhag.',
         [
           matra('Dha', 'Dha'),
           matra('Dhin', 'Dhin'),
@@ -669,11 +666,11 @@ export const TAALS: TaalDefinition[] = [
           matra('Na', 'Na'),
           matra('Ta', 'Ta'),
           tiTe('Tit'),
-          matra('Dha', 'Dha'),
-          matra('Dhin', 'Dhin'),
-          matra('Dhin', 'Dhin'),
-          matra('Dha', 'Dha'),
           matra('Tin', 'Tin'),
+          matra('Tin', 'Tin'),
+          matra('Na', 'Na'),
+          matra('Dha', 'Dha'),
+          matra('Dhin', 'Dhin'),
           matra('Na', 'Na'),
           matra('Dha', 'Dha'),
         ],
@@ -694,13 +691,13 @@ export const TAALS: TaalDefinition[] = [
       loop(
         'standard',
         'Standard',
-        'Bhajani with delayed right-hand pickups that suit bhajan and kirtan phrasing.',
+        'Bhajani with delayed right-hand pickups, opening on dhin and answering with a khali tin half.',
         [
           matra('Dhin', 'Dhin'),
           naDhin(),
           late('S Dhin', 'Dhin'),
           matra('Na', 'Na'),
-          matra('Dhin', 'Dhin'),
+          matra('Tin', 'Tin'),
           naTin(),
           late('S Tin', 'Tin'),
           matra('Na', 'Na'),

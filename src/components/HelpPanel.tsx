@@ -31,6 +31,10 @@ export function HelpPanel() {
             <strong>Use</strong>
             <p>Choose your tonic and taal, press Start once to unlock audio, then adjust BPM as you practise.</p>
           </div>
+          <div>
+            <strong>Layers</strong>
+            <p>Tanpura and tabla play independently — switch either off to practise with just the drone or just the taal.</p>
+          </div>
         </div>
       </details>
     </SectionCard>

@@ -20,3 +20,9 @@ Included preview files in this folder:
 - `te.mp3` from `te stroke` (`171913`)
 
 Each file was downloaded from the Freesound preview CDN and bundled for tabla playback inside SurSaath.
+
+Processing applied for SurSaath:
+
+- decoded from the bundled mp3 previews, peak-normalized to -3 dBFS,
+  trailing silence trimmed with a short fade-out, and saved as mono
+  16-bit WAV (`<bol>.wav`) so every stroke plays at a consistent level.

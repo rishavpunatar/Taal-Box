@@ -12,16 +12,16 @@ const fillStroke = (bol: Bol, offset: number, velocity: number): TaalStroke => (
 })
 
 const FILL_PALETTES: Record<string, TransitionFillPalette> = {
+  // Mirrors the occasional doubled dha/ghe pickups heard in the source recording.
   'dadra:ghazal': {
-    cadence: 2,
+    cadence: 3,
     variants: [
       [
-        fillStroke('Ti', 0.5, 0.52),
-        fillStroke('Na', 0.76, 0.6),
+        fillStroke('Dha', 0.72, 0.5),
       ],
       [
-        fillStroke('Dhi', 0.42, 0.48),
-        fillStroke('Na', 0.72, 0.56),
+        fillStroke('Ge', 0.66, 0.3),
+        fillStroke('Dha', 0.86, 0.45),
       ],
     ],
   },

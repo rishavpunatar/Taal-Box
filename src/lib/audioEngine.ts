@@ -3,13 +3,11 @@ import type {
   Bol,
   CyclePosition,
   TaalBeat,
-  TaalLoopAudio,
   TaalDefinition,
   TaalLoopVariant,
   TaalStroke,
   Tonic,
 } from '../types/music'
-import { TAALS } from '../data/taals'
 import {
   getClosestTonicInterval,
   getPerfectFifth,
@@ -24,10 +22,7 @@ const TABLA_SAMPLE_BASE_URL = `${import.meta.env.BASE_URL}audio/tabla-fs/`
 const TANPURA_SAMPLE_URL = `${import.meta.env.BASE_URL}audio/tanpura/electronic-tanpura-c-pa-mid.mp3`
 const TANPURA_LOOP_START_SECONDS = 6
 const TANPURA_LOOP_END_SECONDS = 248
-const TANPURA_GRAIN_SIZE = 0.32
-const TANPURA_GRAIN_OVERLAP = 0.14
-const LIVE_LOOP_GRAIN_SIZE = 0.14
-const LIVE_LOOP_GRAIN_OVERLAP = 0.07
+const TANPURA_LOOP_CROSSFADE_SECONDS = 2.4
 const TABLA_SAMPLE_NOTES = {
   dha: 'C3',
   dhin: 'D3',
@@ -43,19 +38,91 @@ const TABLA_SAMPLE_NOTES = {
   ka: 'G4',
 } as const
 
+interface TablaVoice {
+  note: string
+  duration: number
+  gain: number
+  followsAccent?: boolean
+}
+
+// The samples are peak-normalized, so `gain` sets each bol's musical weight
+// directly. Durations are in seconds: resonant strokes ring out fully,
+// closed strokes stay tight at any tempo.
+const TABLA_VOICES: Record<Bol, TablaVoice> = {
+  Dha: { note: TABLA_SAMPLE_NOTES.dha, duration: 0.8, gain: 1, followsAccent: true },
+  Dhin: { note: TABLA_SAMPLE_NOTES.dhin, duration: 0.8, gain: 1, followsAccent: true },
+  Dhi: { note: TABLA_SAMPLE_NOTES.dhin, duration: 0.7, gain: 0.85 },
+  Tin: { note: TABLA_SAMPLE_NOTES.tin, duration: 0.8, gain: 0.82, followsAccent: true },
+  Na: { note: TABLA_SAMPLE_NOTES.na, duration: 0.6, gain: 0.95 },
+  Ta: { note: TABLA_SAMPLE_NOTES.na, duration: 0.6, gain: 0.85 },
+  Ge: { note: TABLA_SAMPLE_NOTES.ga, duration: 0.5, gain: 0.62 },
+  Tu: { note: TABLA_SAMPLE_NOTES.tun, duration: 0.8, gain: 0.6 },
+  Tun: { note: TABLA_SAMPLE_NOTES.tun, duration: 0.9, gain: 0.6 },
+  Ka: { note: TABLA_SAMPLE_NOTES.ka, duration: 0.25, gain: 0.6 },
+  Ti: { note: TABLA_SAMPLE_NOTES.tit, duration: 0.25, gain: 0.9 },
+  Re: { note: TABLA_SAMPLE_NOTES.re, duration: 0.25, gain: 0.4 },
+  Ki: { note: TABLA_SAMPLE_NOTES.ka, duration: 0.25, gain: 0.52 },
+  Kat: { note: TABLA_SAMPLE_NOTES.kat, duration: 0.3, gain: 0.55 },
+  Tak: { note: TABLA_SAMPLE_NOTES.tak, duration: 0.3, gain: 0.9 },
+}
+
 function levelToDb(level: number) {
   return Tone.gainToDb(Math.max(level, 0.0001))
 }
 
-function getPlaybackRate(bpm: number, sourceBpm: number) {
-  return bpm / Math.max(sourceBpm, 1)
-}
+/**
+ * Build a click-free loop by equal-power crossfading the tail of the region
+ * into its head. The result loops seamlessly from 0 to its full length.
+ */
+function makeSeamlessLoopBuffer(
+  source: Tone.ToneAudioBuffer,
+  startSeconds: number,
+  endSeconds: number,
+  crossfadeSeconds: number,
+) {
+  const raw = source.get()
 
-function shouldPreserveLoopPitch(audioLoop: TaalLoopAudio) {
-  return audioLoop.preservePitch ?? Boolean(audioLoop.sourceTonic)
-}
+  if (!raw) {
+    return null
+  }
 
-type LoopPlayer = Tone.Player | Tone.GrainPlayer
+  const sampleRate = raw.sampleRate
+  const start = Math.max(0, Math.floor(startSeconds * sampleRate))
+  const end = Math.min(raw.length, Math.floor(endSeconds * sampleRate))
+  const fade = Math.min(
+    Math.floor(crossfadeSeconds * sampleRate),
+    Math.floor((end - start) / 4),
+  )
+  const length = end - start - fade
+
+  if (length <= 0) {
+    return null
+  }
+
+  const output = new AudioBuffer({
+    numberOfChannels: raw.numberOfChannels,
+    length,
+    sampleRate,
+  })
+
+  for (let channel = 0; channel < raw.numberOfChannels; channel += 1) {
+    const input = raw.getChannelData(channel)
+    const data = output.getChannelData(channel)
+
+    for (let i = 0; i < length; i += 1) {
+      data[i] = input[start + i]
+    }
+
+    for (let i = 0; i < fade; i += 1) {
+      const theta = (Math.PI / 2) * (i / fade)
+      data[i] =
+        input[start + i] * Math.sin(theta) +
+        input[start + length + i] * Math.cos(theta)
+    }
+  }
+
+  return output
+}
 
 export class SurSaathAudioEngine {
   private currentTaal: TaalDefinition
@@ -64,17 +131,19 @@ export class SurSaathAudioEngine {
   private currentStepIndex = 0
   private currentCycle = 1
   private initialized = false
+  private disposed = false
   private audioUnlocked = false
   private primePromise: Promise<void> | null = null
   private onCyclePosition?: (position: CyclePosition) => void
+  private tanpuraEnabled = true
+  private percussionEnabled = true
 
   private tanpuraBus!: Tone.Gain
   private tanpuraHighpass!: Tone.Filter
   private tanpuraFilter!: Tone.Filter
-  private tanpuraChorus!: Tone.Chorus
   private tanpuraReverb!: Tone.Reverb
   private tanpuraVolume!: Tone.Volume
-  private tanpuraSample!: Tone.GrainPlayer
+  private tanpuraPlayer!: Tone.Player
   private tanpuraSampleLoaded = false
   private tanpuraStrings!: Tone.PluckSynth[]
   private tanpuraResonance!: Tone.PolySynth<Tone.Synth>
@@ -83,10 +152,6 @@ export class SurSaathAudioEngine {
   private tanpuraJivariFilter!: Tone.Filter
 
   private percussionBus!: Tone.Gain
-  private liveLoopBus!: Tone.Gain
-  private liveLoopHighpass!: Tone.Filter
-  private liveLoopLowpass!: Tone.Filter
-  private liveLoopCompressor!: Tone.Compressor
   private percussionCompressor!: Tone.Compressor
   private percussionReverb!: Tone.Reverb
   private percussionVolume!: Tone.Volume
@@ -98,8 +163,6 @@ export class SurSaathAudioEngine {
   private noise!: Tone.NoiseSynth
   private tablaSampler!: Tone.Sampler
   private tablaSamplerLoaded = false
-  private loopPlayers = new Map<string, LoopPlayer>()
-  private activeLoopPlayer: LoopPlayer | null = null
 
   private matraEventId?: number
   private tanpuraEventId?: number
@@ -145,23 +208,16 @@ export class SurSaathAudioEngine {
 
     this.tanpuraBus = new Tone.Gain(0.9)
     this.tanpuraHighpass = new Tone.Filter(110, 'highpass')
-    this.tanpuraFilter = new Tone.Filter(2600, 'lowpass')
-    this.tanpuraChorus = new Tone.Chorus({
-      frequency: 0.05,
-      delayTime: 2.2,
-      depth: 0.03,
-      wet: 0.02,
-    }).start()
+    this.tanpuraFilter = new Tone.Filter(3200, 'lowpass')
     this.tanpuraReverb = new Tone.Reverb({
-      decay: 4.8,
-      wet: 0.12,
+      decay: 5.4,
+      wet: 0.14,
       preDelay: 0.01,
     })
     this.tanpuraVolume = new Tone.Volume(-8)
     this.tanpuraBus.chain(
       this.tanpuraHighpass,
       this.tanpuraFilter,
-      this.tanpuraChorus,
       this.tanpuraReverb,
       this.tanpuraVolume,
       Tone.Destination,
@@ -233,31 +289,37 @@ export class SurSaathAudioEngine {
       volume: -34,
     }).connect(this.tanpuraJivariFilter)
     this.tanpuraJivariFilter.connect(this.tanpuraBus)
+
+    this.tanpuraPlayer = new Tone.Player({
+      loop: true,
+      fadeIn: 0.5,
+      fadeOut: 0.5,
+    }).connect(this.tanpuraBus)
     const tanpuraSampleReady = new Promise<void>((resolve) => {
-      this.tanpuraSample = new Tone.GrainPlayer({
-        url: TANPURA_SAMPLE_URL,
-        loop: true,
-        grainSize: TANPURA_GRAIN_SIZE,
-        overlap: TANPURA_GRAIN_OVERLAP,
-        loopStart: TANPURA_LOOP_START_SECONDS,
-        loopEnd: TANPURA_LOOP_END_SECONDS,
-        onload: () => {
-          this.tanpuraSampleLoaded = true
-          this.updateTanpuraSamplePitch()
+      const sourceBuffer = new Tone.ToneAudioBuffer(
+        TANPURA_SAMPLE_URL,
+        () => {
+          const seamless = makeSeamlessLoopBuffer(
+            sourceBuffer,
+            TANPURA_LOOP_START_SECONDS,
+            TANPURA_LOOP_END_SECONDS,
+            TANPURA_LOOP_CROSSFADE_SECONDS,
+          )
+
+          if (seamless) {
+            this.tanpuraPlayer.buffer = new Tone.ToneAudioBuffer(seamless)
+            this.tanpuraSampleLoaded = true
+            this.updateTanpuraSamplePitch()
+          }
+
+          sourceBuffer.dispose()
           resolve()
         },
-        onerror: () => {
-          this.tanpuraSampleLoaded = false
-          resolve()
-        },
-      }).connect(this.tanpuraBus)
+        () => resolve(),
+      )
     })
 
     this.percussionBus = new Tone.Gain(1)
-    this.liveLoopBus = new Tone.Gain(0.92)
-    this.liveLoopHighpass = new Tone.Filter(120, 'highpass')
-    this.liveLoopLowpass = new Tone.Filter(3400, 'lowpass')
-    this.liveLoopCompressor = new Tone.Compressor(-16, 3)
     this.percussionCompressor = new Tone.Compressor(-20, 4)
     this.percussionReverb = new Tone.Reverb({
       decay: 1.15,
@@ -270,12 +332,6 @@ export class SurSaathAudioEngine {
       this.percussionReverb,
       this.percussionVolume,
       Tone.Destination,
-    )
-    this.liveLoopBus.chain(
-      this.liveLoopHighpass,
-      this.liveLoopLowpass,
-      this.liveLoopCompressor,
-      this.percussionVolume,
     )
     this.percussionNoiseFilter = new Tone.Filter(2200, 'highpass')
     this.percussionNoiseFilter.connect(this.percussionBus)
@@ -341,22 +397,22 @@ export class SurSaathAudioEngine {
     const samplerReady = new Promise<void>((resolve) => {
       this.tablaSampler = new Tone.Sampler({
         urls: {
-          [TABLA_SAMPLE_NOTES.dha]: 'dha.mp3',
-          [TABLA_SAMPLE_NOTES.dhin]: 'dhin.mp3',
-          [TABLA_SAMPLE_NOTES.ga]: 'ga.mp3',
-          [TABLA_SAMPLE_NOTES.na]: 'na.mp3',
-          [TABLA_SAMPLE_NOTES.tin]: 'tin.mp3',
-          [TABLA_SAMPLE_NOTES.tun]: 'tun.mp3',
-          [TABLA_SAMPLE_NOTES.tak]: 'tak.mp3',
-          [TABLA_SAMPLE_NOTES.te]: 'te.mp3',
-          [TABLA_SAMPLE_NOTES.tit]: 'tit.mp3',
-          [TABLA_SAMPLE_NOTES.re]: 're.mp3',
-          [TABLA_SAMPLE_NOTES.kat]: 'kat.mp3',
-          [TABLA_SAMPLE_NOTES.ka]: 'ka.mp3',
+          [TABLA_SAMPLE_NOTES.dha]: 'dha.wav',
+          [TABLA_SAMPLE_NOTES.dhin]: 'dhin.wav',
+          [TABLA_SAMPLE_NOTES.ga]: 'ga.wav',
+          [TABLA_SAMPLE_NOTES.na]: 'na.wav',
+          [TABLA_SAMPLE_NOTES.tin]: 'tin.wav',
+          [TABLA_SAMPLE_NOTES.tun]: 'tun.wav',
+          [TABLA_SAMPLE_NOTES.tak]: 'tak.wav',
+          [TABLA_SAMPLE_NOTES.te]: 'te.wav',
+          [TABLA_SAMPLE_NOTES.tit]: 'tit.wav',
+          [TABLA_SAMPLE_NOTES.re]: 're.wav',
+          [TABLA_SAMPLE_NOTES.kat]: 'kat.wav',
+          [TABLA_SAMPLE_NOTES.ka]: 'ka.wav',
         },
         baseUrl: TABLA_SAMPLE_BASE_URL,
         attack: 0,
-        release: 0.08,
+        release: 0.12,
         curve: 'exponential',
         onload: () => {
           this.tablaSamplerLoaded = true
@@ -374,10 +430,13 @@ export class SurSaathAudioEngine {
       this.tanpuraReverb.generate(),
       this.percussionReverb.generate(),
       samplerReady,
-      this.preloadLoopPlayers(),
     ])
 
-    await this.prepareCurrentLoopAudio()
+    // Disposed while buffers were still loading (e.g. a React dev-mode
+    // double-mount): don't schedule anything on the shared transport.
+    if (this.disposed) {
+      return
+    }
 
     this.matraEventId = Tone.Transport.scheduleRepeat(
       (time) => this.playCurrentMatra(time),
@@ -393,15 +452,14 @@ export class SurSaathAudioEngine {
 
   async start() {
     await this.ensureReady()
-    await this.prepareCurrentLoopAudio()
 
-    if (Tone.Transport.state === 'started') {
+    if (this.tanpuraEnabled) {
       this.startTanpuraDrone()
-      return
     }
 
-    this.startTanpuraDrone()
-    Tone.Transport.start('+0.03')
+    if (Tone.Transport.state !== 'started') {
+      Tone.Transport.start('+0.03')
+    }
   }
 
   pause() {
@@ -439,14 +497,16 @@ export class SurSaathAudioEngine {
     this.silenceVoices()
 
     if (wasPlaying) {
-      this.startTanpuraDrone()
+      if (this.tanpuraEnabled) {
+        this.startTanpuraDrone()
+      }
+
       Tone.Transport.start('+0.05')
     }
   }
 
   setTempo(bpm: number) {
     Tone.Transport.bpm.rampTo(bpm, 0.15)
-    this.updateActiveLoopPlaybackRate(bpm)
   }
 
   setTanpuraVolume(level: number) {
@@ -465,25 +525,45 @@ export class SurSaathAudioEngine {
     this.percussionVolume.volume.rampTo(levelToDb(level), 0.1)
   }
 
+  setTanpuraEnabled(enabled: boolean) {
+    this.tanpuraEnabled = enabled
+
+    if (!this.initialized) {
+      return
+    }
+
+    if (!enabled) {
+      this.stopTanpuraDrone()
+      this.tanpuraStrings.forEach((string) => string.triggerRelease())
+      this.tanpuraResonance.releaseAll()
+      this.tanpuraSympathetic.releaseAll()
+      return
+    }
+
+    if (Tone.Transport.state === 'started') {
+      this.startTanpuraDrone()
+    }
+  }
+
+  setPercussionEnabled(enabled: boolean) {
+    this.percussionEnabled = enabled
+  }
+
   setTonic(tonic: Tonic) {
     this.currentTonic = tonic
     this.updateTanpuraSamplePitch()
-    this.updateActiveLoopPitch()
   }
 
   setTaal(taal: TaalDefinition, loop: TaalLoopVariant) {
-    this.deactivateLoopPlayer()
     this.currentTaal = taal
     this.currentLoop = loop
     this.reset()
     this.emitIdlePosition()
-
-    if (this.initialized) {
-      void this.prepareCurrentLoopAudio()
-    }
   }
 
   dispose() {
+    this.disposed = true
+
     if (this.matraEventId !== undefined) {
       Tone.Transport.clear(this.matraEventId)
     }
@@ -500,20 +580,15 @@ export class SurSaathAudioEngine {
       this.tanpuraResonance.dispose()
       this.tanpuraSympathetic.dispose()
       this.tanpuraJivari.dispose()
-      this.tanpuraSample.dispose()
+      this.tanpuraPlayer.dispose()
       this.tanpuraBus.dispose()
       this.tanpuraHighpass.dispose()
       this.tanpuraFilter.dispose()
-      this.tanpuraChorus.dispose()
       this.tanpuraReverb.dispose()
       this.tanpuraVolume.dispose()
       this.tanpuraJivariFilter.dispose()
 
       this.percussionBus.dispose()
-      this.liveLoopBus.dispose()
-      this.liveLoopHighpass.dispose()
-      this.liveLoopLowpass.dispose()
-      this.liveLoopCompressor.dispose()
       this.percussionCompressor.dispose()
       this.percussionReverb.dispose()
       this.percussionVolume.dispose()
@@ -524,13 +599,6 @@ export class SurSaathAudioEngine {
       this.ring.dispose()
       this.metallic.dispose()
       this.noise.dispose()
-      this.loopPlayers.forEach((player) => {
-        player.unsync()
-        player.stop()
-        player.dispose()
-      })
-      this.loopPlayers.clear()
-      this.activeLoopPlayer = null
     }
   }
 
@@ -566,183 +634,41 @@ export class SurSaathAudioEngine {
     this.tanpuraSympathetic.releaseAll()
   }
 
-  private getLoopAudioUrl(audioLoop: TaalLoopAudio) {
-    return `${import.meta.env.BASE_URL}${audioLoop.url.replace(/^\/+/, '')}`
-  }
-
   private updateTanpuraSamplePitch() {
-    if (!this.tanpuraSample) {
+    if (!this.tanpuraPlayer || !this.tanpuraSampleLoaded) {
       return
     }
 
-    this.tanpuraSample.detune =
-      getClosestTonicInterval(TANPURA_SAMPLE_SOURCE_TONIC, this.currentTonic) * 100
+    const interval = getClosestTonicInterval(
+      TANPURA_SAMPLE_SOURCE_TONIC,
+      this.currentTonic,
+    )
+
+    // Resampling keeps the tone fully intact; the drone's pluck pacing
+    // drifts a little with pitch, which suits a drone fine.
+    this.tanpuraPlayer.playbackRate = Math.pow(2, interval / 12)
   }
 
   private startTanpuraDrone(time?: Tone.Unit.Time) {
-    if (!this.tanpuraSampleLoaded) {
+    if (!this.tanpuraSampleLoaded || !this.tanpuraEnabled) {
       return
     }
 
     this.updateTanpuraSamplePitch()
 
-    if (this.tanpuraSample.state === 'started') {
+    if (this.tanpuraPlayer.state === 'started') {
       return
     }
 
-    this.tanpuraSample.start(time, TANPURA_LOOP_START_SECONDS)
+    this.tanpuraPlayer.start(time)
   }
 
   private stopTanpuraDrone(time?: Tone.Unit.Time) {
-    if (!this.tanpuraSampleLoaded || this.tanpuraSample.state !== 'started') {
+    if (!this.tanpuraSampleLoaded || this.tanpuraPlayer.state !== 'started') {
       return
     }
 
-    this.tanpuraSample.stop(time)
-  }
-
-  private async createLoopPlayer(audioLoop: TaalLoopAudio) {
-    return new Promise<LoopPlayer>((resolve) => {
-      if (shouldPreserveLoopPitch(audioLoop)) {
-        const player = new Tone.GrainPlayer({
-          url: this.getLoopAudioUrl(audioLoop),
-          loop: audioLoop.loop ?? true,
-          grainSize: LIVE_LOOP_GRAIN_SIZE,
-          overlap: LIVE_LOOP_GRAIN_OVERLAP,
-          onload: () => resolve(player),
-          onerror: () => resolve(player),
-        }).connect(this.liveLoopBus)
-
-        return
-      }
-
-      const player = new Tone.Player({
-        url: this.getLoopAudioUrl(audioLoop),
-        loop: audioLoop.loop ?? true,
-        fadeIn: 0.01,
-        fadeOut: 0.04,
-        onload: () => resolve(player),
-        onerror: () => resolve(player),
-      }).connect(this.liveLoopBus)
-    })
-  }
-
-  private async preloadLoopPlayers() {
-    const loopSources = new Map<string, TaalLoopAudio>()
-
-    TAALS.forEach((taal) => {
-      taal.loops.forEach((loop) => {
-        if (loop.audioLoop) {
-          loopSources.set(loop.audioLoop.url, loop.audioLoop)
-        }
-      })
-    })
-
-    await Promise.all(
-      [...loopSources.values()].map(async (audioLoop) => {
-        if (this.loopPlayers.has(audioLoop.url)) {
-          return
-        }
-
-        const player = await this.createLoopPlayer(audioLoop)
-        this.loopPlayers.set(audioLoop.url, player)
-      }),
-    )
-  }
-
-  private deactivateLoopPlayer() {
-    if (!this.activeLoopPlayer) {
-      return
-    }
-
-    this.activeLoopPlayer.unsync()
-    this.activeLoopPlayer.stop()
-    this.activeLoopPlayer = null
-  }
-
-  private updateActiveLoopPlaybackRate(bpm: number) {
-    if (!this.activeLoopPlayer || !this.currentLoop.audioLoop) {
-      return
-    }
-
-    this.activeLoopPlayer.playbackRate = getPlaybackRate(
-      bpm,
-      this.currentLoop.audioLoop.sourceBpm,
-    )
-  }
-
-  private getLoopDetune(audioLoop: TaalLoopAudio) {
-    if (!audioLoop.sourceTonic) {
-      return 0
-    }
-
-    return getClosestTonicInterval(audioLoop.sourceTonic, this.currentTonic) * 100
-  }
-
-  private applyLoopPitch(player: LoopPlayer, audioLoop: TaalLoopAudio) {
-    if (!(player instanceof Tone.GrainPlayer)) {
-      return
-    }
-
-    player.detune = this.getLoopDetune(audioLoop)
-  }
-
-  private updateActiveLoopPitch() {
-    if (!this.activeLoopPlayer || !this.currentLoop.audioLoop) {
-      return
-    }
-
-    this.applyLoopPitch(this.activeLoopPlayer, this.currentLoop.audioLoop)
-  }
-
-  private activateLoopPlayer(player: LoopPlayer, audioLoop: TaalLoopAudio) {
-    if (this.activeLoopPlayer && this.activeLoopPlayer !== player) {
-      this.deactivateLoopPlayer()
-    }
-
-    player.unsync()
-    player.stop()
-    player.loop = audioLoop.loop ?? true
-    player.loopStart = audioLoop.loopStartSeconds ?? 0
-    player.loopEnd = audioLoop.loopEndSeconds ?? player.buffer.duration
-    player.playbackRate = getPlaybackRate(Tone.Transport.bpm.value, audioLoop.sourceBpm)
-    this.applyLoopPitch(player, audioLoop)
-    player.sync().start(0, audioLoop.loopStartSeconds ?? 0)
-    this.activeLoopPlayer = player
-  }
-
-  private async prepareCurrentLoopAudio() {
-    if (!this.initialized) {
-      return
-    }
-
-    const audioLoop = this.currentLoop.audioLoop
-
-    if (!audioLoop) {
-      this.deactivateLoopPlayer()
-      return
-    }
-
-    let player = this.loopPlayers.get(audioLoop.url)
-
-    if (!player) {
-      player = await this.createLoopPlayer(audioLoop)
-      this.loopPlayers.set(audioLoop.url, player)
-    }
-
-    this.activateLoopPlayer(player, audioLoop)
-  }
-
-  private isLoopAudioReplacingPercussion() {
-    return (
-      this.currentLoop.audioLoop?.mode === 'replace' &&
-      this.activeLoopPlayer !== null &&
-      this.activeLoopPlayer.loaded
-    )
-  }
-
-  private shouldAccentLoopBeat(matra: number) {
-    return this.currentLoop.audioLoop?.accentBeats?.includes(matra) ?? false
+    this.tanpuraPlayer.stop(time)
   }
 
   private playCurrentMatra(time: number) {
@@ -752,33 +678,18 @@ export class SurSaathAudioEngine {
     const isSam = matra === this.currentTaal.sam
     const isKhali = this.currentTaal.khali.includes(matra)
     const isVibhagStart = vibhagStarts.includes(matra)
-    const transitionFill =
-      this.currentStepIndex === this.currentLoop.beats.length - 1
-        ? getTransitionFill(
-            this.currentTaal.id,
-            this.currentLoop.id,
-            this.currentCycle,
-          )
-        : []
 
-    if (!this.isLoopAudioReplacingPercussion()) {
-      this.triggerBeat(beat, time, {
-        isSam,
-        isKhali,
-        isVibhagStart,
-      }, transitionFill)
-    } else if (this.shouldAccentLoopBeat(matra)) {
-      this.triggerBeat(
-        beat,
-        time,
-        {
-          isSam,
-          isKhali,
-          isVibhagStart,
-        },
-        [],
-        this.currentLoop.audioLoop?.accentGain ?? 0.76,
-      )
+    if (this.percussionEnabled) {
+      const transitionFill =
+        this.currentStepIndex === this.currentLoop.beats.length - 1
+          ? getTransitionFill(
+              this.currentTaal.id,
+              this.currentLoop.id,
+              this.currentCycle,
+            )
+          : []
+
+      this.triggerBeat(beat, time, { isSam, isKhali, isVibhagStart }, transitionFill)
     }
 
     Tone.Draw.schedule(() => {
@@ -810,9 +721,9 @@ export class SurSaathAudioEngine {
       isVibhagStart: boolean
     },
     extraStrokes: TaalStroke[] = [],
-    beatVelocityScale = 1,
   ) {
     const matraSeconds = Tone.Time('4n').toSeconds()
+    const authored = this.currentLoop.dynamics === 'authored'
     const scheduledStrokes = [...beat.strokes, ...extraStrokes]
 
     scheduledStrokes.forEach((stroke, index) => {
@@ -826,13 +737,14 @@ export class SurSaathAudioEngine {
         stroke.bol,
         time + matraSeconds * (stroke.offset ?? defaultOffset),
         emphasis,
-        velocityScale * beatVelocityScale,
+        velocityScale,
+        authored,
       )
     })
   }
 
   private playTanpuraCycle(time: number) {
-    if (this.tanpuraSampleLoaded) {
+    if (this.tanpuraSampleLoaded || !this.tanpuraEnabled) {
       return
     }
 
@@ -901,18 +813,21 @@ export class SurSaathAudioEngine {
       isVibhagStart: boolean
     },
     velocityScale = 1,
+    authored = false,
   ) {
-    const baseVelocity = emphasis.isSam
+    const baseVelocity = authored
       ? 1
-      : emphasis.isKhali
-        ? 0.74
-        : emphasis.isVibhagStart
-          ? 0.88
-          : 0.78
+      : emphasis.isSam
+        ? 1
+        : emphasis.isKhali
+          ? 0.8
+          : emphasis.isVibhagStart
+            ? 0.9
+            : 0.8
     const velocity = Math.min(1, Math.max(0.05, baseVelocity * velocityScale))
 
     if (this.tablaSamplerLoaded) {
-      this.triggerTablaBol(bol, time, velocity, emphasis)
+      this.triggerTablaBol(bol, time, velocity, emphasis, authored)
       return
     }
 
@@ -927,8 +842,8 @@ export class SurSaathAudioEngine {
         this.ring.triggerAttackRelease('A4', '16n', time, velocity * 0.82)
         break
       case 'Dhi':
-        this.dayan.triggerAttackRelease('A3', '16n', time, velocity * 0.76)
-        this.ring.triggerAttackRelease('E4', '32n', time, velocity * 0.42)
+        this.bayan.triggerAttackRelease('D2', '8n', time, velocity * 0.7)
+        this.ring.triggerAttackRelease('A4', '16n', time, velocity * 0.6)
         break
       case 'Tin':
         this.ring.triggerAttackRelease('B4', '16n', time, velocity * 0.9)
@@ -939,14 +854,14 @@ export class SurSaathAudioEngine {
         this.ring.triggerAttackRelease('D5', '32n', time, velocity * 0.42)
         break
       case 'Ta':
-        this.metallic.triggerAttackRelease('16n', time, velocity * 0.72)
-        this.noise.triggerAttackRelease('32n', time, velocity * 0.4)
+        this.noise.triggerAttackRelease('32n', time, velocity * 0.5)
+        this.ring.triggerAttackRelease('D5', '32n', time, velocity * 0.4)
         break
       case 'Ge':
         this.bayan.triggerAttackRelease('A1', '8n', time, velocity * 0.92)
         break
       case 'Tu':
-        this.dayan.triggerAttackRelease('F3', '16n', time, velocity * 0.68)
+        this.ring.triggerAttackRelease('G4', '8n', time, velocity * 0.7)
         break
       case 'Tun':
         this.ring.triggerAttackRelease('G4', '8n', time, velocity * 0.92)
@@ -967,6 +882,10 @@ export class SurSaathAudioEngine {
         this.metallic.triggerAttackRelease('16n', time, velocity * 0.68)
         this.noise.triggerAttackRelease('64n', time, velocity * 0.3)
         break
+      case 'Tak':
+        this.metallic.triggerAttackRelease('16n', time, velocity * 0.72)
+        this.noise.triggerAttackRelease('32n', time, velocity * 0.4)
+        break
       default:
         this.ring.triggerAttackRelease('A4', '32n', time, velocity * 0.36)
     }
@@ -981,144 +900,25 @@ export class SurSaathAudioEngine {
       isKhali: boolean
       isVibhagStart: boolean
     },
+    authored = false,
   ) {
-    const accentBoost = emphasis.isSam
-      ? 1
-      : emphasis.isKhali
-        ? 0.92
-        : emphasis.isVibhagStart
-          ? 0.96
-          : 0.9
+    const voice = TABLA_VOICES[bol]
+    const accentBoost =
+      authored || !voice.followsAccent
+        ? 1
+        : emphasis.isSam
+          ? 1
+          : emphasis.isKhali
+            ? 0.92
+            : emphasis.isVibhagStart
+              ? 0.96
+              : 0.9
 
-    switch (bol) {
-      case 'Dha':
-        this.playTablaSample(TABLA_SAMPLE_NOTES.dha, '8n', time, velocity * accentBoost)
-        break
-      case 'Dhin':
-        this.playTablaSample(
-          TABLA_SAMPLE_NOTES.dhin,
-          '8n',
-          time,
-          velocity * accentBoost,
-        )
-        break
-      case 'Dhi':
-        this.playTablaSample(
-          TABLA_SAMPLE_NOTES.tin,
-          '16n',
-          time,
-          velocity * 0.86,
-        )
-        break
-      case 'Tin':
-        this.playTablaSample(
-          TABLA_SAMPLE_NOTES.tin,
-          '8n',
-          time,
-          velocity * accentBoost,
-        )
-        break
-      case 'Na':
-        this.playTablaSample(
-          TABLA_SAMPLE_NOTES.na,
-          '16n',
-          time,
-          velocity * 0.92,
-        )
-        break
-      case 'Ta':
-        this.playTablaSample(
-          TABLA_SAMPLE_NOTES.tak,
-          '16n',
-          time,
-          velocity * 0.84,
-        )
-        break
-      case 'Ge':
-        this.playTablaSample(
-          TABLA_SAMPLE_NOTES.ga,
-          '8n',
-          time,
-          velocity * 0.94,
-        )
-        break
-      case 'Tu':
-        this.playTablaSample(
-          TABLA_SAMPLE_NOTES.te,
-          '16n',
-          time,
-          velocity * 0.8,
-        )
-        break
-      case 'Tun':
-        this.playTablaSample(
-          TABLA_SAMPLE_NOTES.tun,
-          '4n',
-          time,
-          velocity * 0.96,
-        )
-        break
-      case 'Ka':
-        this.playTablaSample(
-          TABLA_SAMPLE_NOTES.ka,
-          '64n',
-          time,
-          velocity * 0.8,
-        )
-        break
-      case 'Ti':
-        this.playTablaSample(
-          TABLA_SAMPLE_NOTES.tit,
-          '32n',
-          time,
-          velocity * 0.82,
-        )
-        break
-      case 'Re':
-        this.playTablaSample(
-          TABLA_SAMPLE_NOTES.re,
-          '64n',
-          time,
-          velocity * 0.74,
-        )
-        break
-      case 'Ki':
-        this.playTablaSample(
-          TABLA_SAMPLE_NOTES.ka,
-          '64n',
-          time,
-          velocity * 0.72,
-        )
-        break
-      case 'Kat':
-        this.playTablaSample(
-          TABLA_SAMPLE_NOTES.kat,
-          '32n',
-          time,
-          velocity * 0.82,
-        )
-        break
-      default:
-        this.playTablaSample(
-          TABLA_SAMPLE_NOTES.tin,
-          '16n',
-          time,
-          velocity * 0.8,
-        )
-    }
-  }
-
-  private playTablaSample(
-    note: string,
-    duration: string,
-    time: number,
-    velocity: number,
-  ) {
     this.tablaSampler.triggerAttackRelease(
-      note,
-      duration,
+      voice.note,
+      voice.duration,
       time,
-      Math.min(1, Math.max(0.05, velocity)),
+      Math.min(1, Math.max(0.05, velocity * voice.gain * accentBoost)),
     )
   }
 }

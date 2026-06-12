@@ -527,6 +527,64 @@ input[type='range'] {
   }
 }
 
+.layer-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+}
+
+.layer-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 138px;
+  padding: 0.55rem 1rem;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.layer-toggle__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.28);
+  transition: background 160ms ease, box-shadow 160ms ease;
+}
+
+.layer-toggle--on {
+  border-color: rgba(231, 164, 68, 0.5);
+  background: rgba(231, 164, 68, 0.18);
+}
+
+.layer-toggle--on .layer-toggle__dot {
+  background: rgba(231, 164, 68, 0.95);
+  box-shadow: 0 0 10px rgba(231, 164, 68, 0.65);
+}
+
+.layer-toggle-hint {
+  margin: 0;
+  flex: 1;
+  min-width: 200px;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.tempo-hint {
+  justify-self: start;
+  align-self: start;
+  padding: 0.45rem 0.95rem;
+  border-radius: 999px;
+  border-color: rgba(231, 164, 68, 0.4);
+  background: rgba(231, 164, 68, 0.1);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.tempo-hint:hover {
+  background: rgba(231, 164, 68, 0.2);
+}
+
 @media (max-width: 1040px) {
   .hero-panel,
   .app-grid,

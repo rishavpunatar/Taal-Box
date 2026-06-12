@@ -30,6 +30,7 @@ export type Bol =
   | 'Re'
   | 'Ki'
   | 'Kat'
+  | 'Tak'
 
 export interface TaalStroke {
   bol: Bol
@@ -42,25 +43,18 @@ export interface TaalBeat {
   strokes: TaalStroke[]
 }
 
-export interface TaalLoopAudio {
-  url: string
-  sourceBpm: number
-  sourceTonic?: Tonic
-  preservePitch?: boolean
-  mode?: 'replace' | 'layer'
-  loop?: boolean
-  loopStartSeconds?: number
-  loopEndSeconds?: number
-  accentBeats?: number[]
-  accentGain?: number
-}
-
 export interface TaalLoopVariant {
   id: string
   label: string
   summary: string
   beats: TaalBeat[]
-  audioLoop?: TaalLoopAudio
+  /**
+   * 'authored' loops carry exact per-stroke velocities (e.g. transcribed from
+   * a recording), so the engine plays them as written instead of applying its
+   * own sam/khali/vibhag emphasis curve.
+   */
+  dynamics?: 'authored'
+  suggestedTempo?: number
 }
 
 export interface TaalDefinition {
@@ -82,6 +76,8 @@ export interface AppSettings {
   tempo: number
   tanpuraVolume: number
   percussionVolume: number
+  tanpuraEnabled: boolean
+  percussionEnabled: boolean
 }
 
 export interface CyclePosition {

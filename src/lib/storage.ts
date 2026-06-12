@@ -11,6 +11,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   tempo: 84,
   tanpuraVolume: 0.72,
   percussionVolume: 0.76,
+  tanpuraEnabled: true,
+  percussionEnabled: true,
 }
 
 function isTonic(value: unknown): value is Tonic {
@@ -55,6 +57,14 @@ export function loadSettings() {
         typeof parsed.percussionVolume === 'number'
           ? clampUnitLevel(parsed.percussionVolume)
           : DEFAULT_SETTINGS.percussionVolume,
+      tanpuraEnabled:
+        typeof parsed.tanpuraEnabled === 'boolean'
+          ? parsed.tanpuraEnabled
+          : DEFAULT_SETTINGS.tanpuraEnabled,
+      percussionEnabled:
+        typeof parsed.percussionEnabled === 'boolean'
+          ? parsed.percussionEnabled
+          : DEFAULT_SETTINGS.percussionEnabled,
     }
   } catch {
     return DEFAULT_SETTINGS

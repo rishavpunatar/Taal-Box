@@ -101,6 +101,14 @@ function App() {
     audioEngineRef.current?.setPercussionVolume(settings.percussionVolume)
   }, [settings.percussionVolume])
 
+  useEffect(() => {
+    audioEngineRef.current?.setTanpuraEnabled(settings.tanpuraEnabled)
+  }, [settings.tanpuraEnabled])
+
+  useEffect(() => {
+    audioEngineRef.current?.setPercussionEnabled(settings.percussionEnabled)
+  }, [settings.percussionEnabled])
+
   const resetPositionView = () => {
     setCurrentPosition({
       matra: 1,
@@ -251,6 +259,29 @@ function App() {
             subtitle="Tonic and drone blend"
             aside={<div className="selected-note">{settings.tonic}</div>}
           >
+            <div className="layer-toggle-row">
+              <button
+                className={
+                  settings.tanpuraEnabled
+                    ? 'layer-toggle layer-toggle--on'
+                    : 'layer-toggle'
+                }
+                aria-pressed={settings.tanpuraEnabled}
+                onClick={() =>
+                  updateSettings((current) => ({
+                    ...current,
+                    tanpuraEnabled: !current.tanpuraEnabled,
+                  }))
+                }
+              >
+                <span className="layer-toggle__dot" aria-hidden="true" />
+                {settings.tanpuraEnabled ? 'Tanpura on' : 'Tanpura off'}
+              </button>
+              <p className="layer-toggle-hint">
+                Switch the drone off to practise with tabla alone.
+              </p>
+            </div>
+
             <div className="note-grid" role="radiogroup" aria-label="Select tonic">
               {TONICS.map((note) => (
                 <button
@@ -293,6 +324,30 @@ function App() {
             title="Taal Box"
             subtitle="Cycle, style, and loop selection"
           >
+            <div className="layer-toggle-row">
+              <button
+                className={
+                  settings.percussionEnabled
+                    ? 'layer-toggle layer-toggle--on'
+                    : 'layer-toggle'
+                }
+                aria-pressed={settings.percussionEnabled}
+                onClick={() =>
+                  updateSettings((current) => ({
+                    ...current,
+                    percussionEnabled: !current.percussionEnabled,
+                  }))
+                }
+              >
+                <span className="layer-toggle__dot" aria-hidden="true" />
+                {settings.percussionEnabled ? 'Tabla on' : 'Tabla off'}
+              </button>
+              <p className="layer-toggle-hint">
+                Switch the tabla off to sing over the drone — the cycle tracker
+                keeps counting.
+              </p>
+            </div>
+
             <div className="taal-grid">
               <label className="select-field" htmlFor="taal-select">
                 <span>Choose taal</span>
@@ -348,6 +403,20 @@ function App() {
 
             <p className="support-copy">{selectedTaal.summary}</p>
             <p className="support-copy support-copy--tight">{selectedLoop.summary}</p>
+            {selectedLoop.suggestedTempo !== undefined &&
+            selectedLoop.suggestedTempo !== settings.tempo ? (
+              <button
+                className="tempo-hint"
+                onClick={() =>
+                  updateSettings((current) => ({
+                    ...current,
+                    tempo: clampTempo(selectedLoop.suggestedTempo ?? current.tempo),
+                  }))
+                }
+              >
+                Set recorded feel · {selectedLoop.suggestedTempo} BPM
+              </button>
+            ) : null}
             <div className="theka-strip">{thekaPreview}</div>
 
             <SliderField
