@@ -9,13 +9,21 @@ SurSaath is a static React + TypeScript practice tool for Indian classical riyaa
 - tempo controls for steady practice pacing
 - local persistence for your last-used settings
 
+## Install on Android
+
+Download the latest signed APK from the [SurSaath releases page](https://github.com/rishavpunatar/Taal-Box/releases/latest) or use the [direct APK download](https://github.com/rishavpunatar/Taal-Box/releases/latest/download/SurSaath.apk).
+
+On first install, Android may ask you to allow installs from the browser or file manager you used to open the APK. SurSaath then appears in the launcher as a regular app and works without a network connection.
+
 ## Stack
 
 - React
 - TypeScript
 - Vite
 - Tone.js
+- Capacitor (native Android wrapper)
 - GitHub Pages via GitHub Actions
+- GitHub Releases via GitHub Actions
 
 ## Local development
 
@@ -28,6 +36,12 @@ npm run dev
 
 ```bash
 npm run build
+```
+
+To build the Android APK locally (requires Java 21 and Android SDK 36):
+
+```bash
+npm run android:debug
 ```
 
 The Vite base path is configured for this repository's GitHub Pages project URL:
@@ -48,6 +62,8 @@ On every push to `main`, GitHub Actions:
 If GitHub Pages is not already configured for the repository, set:
 
 - `Settings -> Pages -> Source -> GitHub Actions`
+
+Android release builds are handled by [android-release.yml](./.github/workflows/android-release.yml). Pushing a version tag such as `v1.0.0` builds a signed `SurSaath.apk`, attaches it to a GitHub Release, and updates the stable direct-download URL above. The signing key and passwords live only in encrypted GitHub Actions secrets.
 
 ## Project structure
 

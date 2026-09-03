@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">SurSaath</string>
+    <string name="title_activity_main">SurSaath</string>
+    <string name="package_name">com.rishavpunatar.sursaath</string>
+    <string name="custom_url_scheme">com.rishavpunatar.sursaath</string>
+</resources>
