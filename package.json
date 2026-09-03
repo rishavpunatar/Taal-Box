@@ -1,7 +1,7 @@
 {
   "name": "sursaath",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "SurSaath: a static tanpura and taal box practice app for Indian classical riyaaz.",
   "scripts": {
