@@ -1,14 +1,14 @@
 {
   "name": "sursaath",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "description": "SurSaath: a static tanpura and taal box practice app for Indian classical riyaaz.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "build:android": "npm run build -- --base=./ && cap sync android",
-    "android:assets": "capacitor-assets generate --android --iconBackgroundColor '#12151c' --iconBackgroundColorDark '#12151c' --splashBackgroundColor '#12151c' --splashBackgroundColorDark '#12151c'",
+    "android:assets": "npx --yes @capacitor/assets@3.0.5 generate --android --iconBackgroundColor '#12151c' --iconBackgroundColorDark '#12151c' --splashBackgroundColor '#12151c' --splashBackgroundColorDark '#12151c'",
     "android:debug": "npm run build:android && cd android && ./gradlew assembleDebug",
     "lint": "eslint .",
     "preview": "vite preview"
@@ -21,7 +21,6 @@
     "tone": "^15.1.22"
   },
   "devDependencies": {
-    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^8.5.1",
     "@eslint/js": "^9.39.4",
     "@types/node": "^24.12.0",
